@@ -29,7 +29,7 @@ def require_protocol(value: object, field: str) -> int:
     return value
 
 
-def extract_android_code_constants() -> tuple[str, int]:
+def extract_android_code_constants() -> tuple[str, int, str]:
     view_model = (ROOT / "android" / "phase8" / "DidCompanionViewModel.kt").read_text(
         encoding="utf-8"
     )
@@ -38,12 +38,15 @@ def extract_android_code_constants() -> tuple[str, int]:
     )
 
     version_match = re.search(r'const\s+val\s+ANDROID_VERSION\s*=\s*"([^"]+)"', view_model)
+    minimum_match = re.search(r'const\s+val\s+MINIMUM_DESKTOP_VERSION\s*=\s*"([^"]+)"', view_model)
     protocol_match = re.search(r"const\s+val\s+PROTOCOL\s*=\s*(\d+)", sync_client)
     if not version_match:
         raise AssertionError("Could not find ANDROID_VERSION in DidCompanionViewModel.kt")
+    if not minimum_match:
+        raise AssertionError("Could not find MINIMUM_DESKTOP_VERSION in DidCompanionViewModel.kt")
     if not protocol_match:
         raise AssertionError("Could not find PROTOCOL in DidSyncClient.kt")
-    return version_match.group(1), int(protocol_match.group(1))
+    return version_match.group(1), int(protocol_match.group(1)), minimum_match.group(1)
 
 
 def validate() -> None:
@@ -100,8 +103,6 @@ def validate() -> None:
         if not isinstance(android_release, str) or expected_android_tag not in android_release:
             raise AssertionError("android.release_url must point at the declared Android release")
 
-    # A minimum desktop newer than the currently advertised Windows app would make
-    # the current Android release impossible to use with the current Windows release.
     def parts(version: str) -> tuple[int, int, int]:
         core = version.split("-", 1)[0].split("+", 1)[0]
         major, minor, patch = core.split(".")
@@ -112,7 +113,7 @@ def validate() -> None:
             "android.minimum_desktop_version cannot be newer than updates/windows.json"
         )
 
-    code_version, code_protocol = extract_android_code_constants()
+    code_version, code_protocol, code_minimum_desktop = extract_android_code_constants()
     if code_version != android_version:
         raise AssertionError(
             "Android code version and updates/android.json differ "
@@ -123,10 +124,16 @@ def validate() -> None:
             "DidSyncClient.PROTOCOL and updates/android.json differ "
             f"(code={code_protocol}, manifest={android_protocol})"
         )
+    if code_minimum_desktop != minimum_desktop:
+        raise AssertionError(
+            "DidCompanionViewModel.MINIMUM_DESKTOP_VERSION and updates/android.json differ "
+            f"(code={code_minimum_desktop}, manifest={minimum_desktop})"
+        )
 
     print(
         "Update manifests valid: "
-        f"Windows {windows_version}, Android {android_version}, protocol {windows_protocol}"
+        f"Windows {windows_version}, Android {android_version}, protocol {windows_protocol}, "
+        f"minimum desktop {minimum_desktop}"
     )
 
 
