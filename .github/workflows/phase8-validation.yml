@@ -45,12 +45,13 @@ jobs:
           python-version: "3.12"
       - name: Install sync test dependency
         run: python -m pip install PySide6
-      - name: Run Phase 8 Windows sync tests
+      - name: Run Phase 8 Windows sync and integration tests
         run: >-
           python -m unittest
           windows.test_mobile_sync_server
           windows.test_mobile_sync_frontend_adapter
           windows.test_mobile_companion_controller
+          windows.test_integrate_mobile_companion
           -v
 
   android-debug-build:
