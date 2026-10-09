@@ -43,6 +43,9 @@ fun CompanionConnectionScreen(
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(connectionLabel(state.connection))
+                if (state.reconnectingAutomatically) {
+                    Text("Trying to reconnect automatically…")
+                }
                 Text("Sync protocol: 1")
                 if (state.revision > 0) Text("Character revision: ${state.revision}")
                 state.lastError?.let {
