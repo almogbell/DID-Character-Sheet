@@ -37,6 +37,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Compile Phase 8 Python sources
+        run: python -m compileall -q sync windows
       - name: Validate update manifests and Android protocol constants
         run: python sync/validate_manifests.py
       - name: Validate cross-platform sync protocol contract
