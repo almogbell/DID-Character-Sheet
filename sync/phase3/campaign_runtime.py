@@ -202,9 +202,15 @@ def _flush_pending_rolls_worker(window, client):
             if queue and str(queue[0].get("event_id") or "") == event_id:
                 queue.popleft()
             else:
-                for index, queued in enumerate(list(queue)):
-                    if str(queued.get("event_id") or "") == event_id:
-                        del queue[index]
-                        break
+                matching = next(
+                    (
+                        queued
+                        for queued in queue
+                        if str(queued.get("event_id") or "") == event_id
+                    ),
+                    None,
+                )
+                if matching is not None:
+                    queue.remove(matching)
         window._campaign_sync_status = "Synced"
         window._campaign_runtime_error = ""
