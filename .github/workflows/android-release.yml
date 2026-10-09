@@ -52,7 +52,8 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          test -f android/gradlew || { echo "android/gradlew is missing; merge the full Android Studio project before publishing." >&2; exit 1; }
+          test -f android/settings.gradle.kts || { echo "Android Gradle project is missing." >&2; exit 1; }
+          test -f android/app/build.gradle.kts || { echo "Android app module is missing." >&2; exit 1; }
           test -n "$KEYSTORE_B64" || { echo "ANDROID_KEYSTORE_BASE64 secret is missing." >&2; exit 1; }
           test -n "$STORE_PASSWORD" || { echo "ANDROID_KEYSTORE_PASSWORD secret is missing." >&2; exit 1; }
           test -n "$KEY_ALIAS" || { echo "ANDROID_KEY_ALIAS secret is missing." >&2; exit 1; }
@@ -62,11 +63,10 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
-          cache-dependency-path: |
-            android/*.gradle.kts
-            android/gradle/wrapper/gradle-wrapper.properties
-            android/app/*.gradle.kts
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
 
       - name: Restore Android signing keystore
         shell: bash
@@ -83,9 +83,7 @@ jobs:
           DID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           DID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           DID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease
+        run: gradle --no-daemon :app:assembleRelease
 
       - name: Locate signed APK
         id: apk
