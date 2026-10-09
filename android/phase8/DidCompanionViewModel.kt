@@ -13,10 +13,10 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * UI-facing state holder for the Phase 8 companion connection.
+ * UI-facing state holder for the DID companion connection.
  *
- * The Windows app remains authoritative. Android only displays the latest
- * canonical state received from Windows and sends commands back to it.
+ * Windows remains authoritative. Android displays canonical snapshots and sends
+ * commands; it never commits local game state optimistically.
  */
 class DidCompanionViewModel(application: Application) : AndroidViewModel(application), DidSyncClient.Listener {
 
@@ -112,7 +112,46 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     fun changeAdversity(delta: Int) = submitResourceChange("Adversity", delta)
     fun changeImprovementPoints(delta: Int) = submitResourceChange("IP", delta)
 
+    fun setCharacterName(name: String) = submitCommand(
+        "identity.set",
+        JSONObject().put("field", "name").put("value", name),
+    )
+
+    fun setBackstory(backstory: String) = submitCommand(
+        "identity.set",
+        JSONObject().put("field", "backstory").put("value", backstory),
+    )
+
+    fun addInventoryItem(name: String, description: String, quantity: Int) = submitCommand(
+        "inventory.add",
+        JSONObject()
+            .put("name", name)
+            .put("description", description)
+            .put("quantity", quantity),
+    )
+
+    fun updateInventoryItem(id: String, name: String, description: String, quantity: Int) = submitCommand(
+        "inventory.update",
+        JSONObject()
+            .put("id", id)
+            .put("name", name)
+            .put("description", description)
+            .put("quantity", quantity),
+    )
+
+    fun removeInventoryItem(id: String) = submitCommand(
+        "inventory.remove",
+        JSONObject().put("id", id),
+    )
+
     private fun submitResourceChange(resource: String, delta: Int) {
+        submitCommand(
+            "resource.change",
+            JSONObject().put("resource", resource).put("delta", delta),
+        )
+    }
+
+    private fun submitCommand(action: String, payload: JSONObject) {
         if (!_uiState.value.isConnected) {
             _uiState.update {
                 it.copy(
@@ -123,8 +162,13 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
             }
             return
         }
-        val requestId = syncClient.changeResource(resource, delta)
-        _uiState.update { it.copy(pendingRequestIds = it.pendingRequestIds + requestId, lastError = null) }
+        val requestId = syncClient.sendCommand(action, payload)
+        _uiState.update {
+            it.copy(
+                pendingRequestIds = it.pendingRequestIds + requestId,
+                lastError = null,
+            )
+        }
     }
 
     override fun onConnectionState(state: DidSyncClient.ConnectionState) {
@@ -194,8 +238,6 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
             current.copy(
                 revision = revision,
                 character = character,
-                // Keep the last renderable snapshot if a newer canonical payload
-                // cannot be parsed, but make it read-only until a valid state arrives.
                 snapshot = parsedSnapshot ?: current.snapshot,
                 snapshotProblem = parseProblem,
                 lastError = when {
