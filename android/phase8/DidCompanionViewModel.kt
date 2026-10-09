@@ -24,6 +24,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         val connection: DidSyncClient.ConnectionState = DidSyncClient.ConnectionState.Disconnected,
         val revision: Int = 0,
         val character: JSONObject? = null,
+        val snapshot: DidCharacterSnapshot? = null,
         val lastError: String? = null,
         val pendingRequestIds: Set<String> = emptySet(),
         val protocolMismatchDesktopVersion: String? = null,
@@ -32,8 +33,11 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         val isConnected: Boolean
             get() = connection is DidSyncClient.ConnectionState.Connected
 
+        val isReadOnly: Boolean
+            get() = !isConnected
+
         val characterName: String
-            get() = character?.optString("name")?.takeIf { it.isNotBlank() } ?: "No character"
+            get() = snapshot?.name ?: character?.optString("name")?.takeIf { it.isNotBlank() } ?: "No character"
     }
 
     private val _uiState = MutableStateFlow(UiState())
@@ -124,10 +128,12 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     override fun onCharacterState(revision: Int, character: JSONObject?) {
+        val typedSnapshot = character?.let { runCatching { DidCharacterSnapshot.fromJson(it) }.getOrNull() }
         _uiState.update {
             it.copy(
                 revision = revision,
                 character = character,
+                snapshot = typedSnapshot,
                 lastError = null,
                 reconnectingAutomatically = false,
                 // A canonical state supersedes all optimistic/pending assumptions.
