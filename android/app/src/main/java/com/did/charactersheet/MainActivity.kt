@@ -27,12 +27,7 @@ import com.did.charactersheet.ui.DidTheme
 import com.did.charactersheet.update.AndroidUpdateController
 import com.did.charactersheet.update.UpdateNotice
 
-/**
- * Portrait-first DID companion host.
- *
- * The actual character model is supplied by the running Windows application;
- * this Activity never opens or saves a .didchar file.
- */
+/** Portrait-first DID companion host. Windows owns the canonical character. */
 class MainActivity : ComponentActivity() {
     private val companionViewModel: DidCompanionViewModel by viewModels()
     private lateinit var phase8Bridge: Phase8ActivityBridge
@@ -98,6 +93,11 @@ class MainActivity : ComponentActivity() {
                             onHpChange = companionViewModel::changeHp,
                             onAtChange = companionViewModel::changeAdversity,
                             onIpChange = companionViewModel::changeImprovementPoints,
+                            onSetName = companionViewModel::setCharacterName,
+                            onSetBackstory = companionViewModel::setBackstory,
+                            onAddInventoryItem = companionViewModel::addInventoryItem,
+                            onUpdateInventoryItem = companionViewModel::updateInventoryItem,
+                            onRemoveInventoryItem = companionViewModel::removeInventoryItem,
                             modifier = Modifier.weight(1f),
                         )
                     }
