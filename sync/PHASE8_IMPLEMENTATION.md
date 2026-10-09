@@ -44,7 +44,9 @@ Phase 8 changes DID Android from a copied-character-file prototype into a connec
 - broadcasts desktop-originated state changes without adding networking calls to every existing desktop mutation function
 - detects active-character replacement separately
 - records mobile-originated state signatures before server broadcast so the same mutation is not counted twice
-- identifies the existing DID Tools menu and injects `Mobile Companion` before `Check for Updates`
+- recognizes the finished 1.0.10 Tools menu without depending on a permanent `Check for Updates` row
+- injects `Mobile Companion` before the Dice Roller submenu
+- shuts down with `QApplication.aboutToQuit`, so the existing frontend `closeEvent` does not need network-specific code
 
 `windows/mobile_companion_dialog.py`
 
@@ -57,6 +59,27 @@ Phase 8 changes DID Android from a copied-character-file prototype into a connec
 `windows/mobile_companion_requirements.txt`
 
 - adds the QR-code packaging dependency
+
+`windows/integrate_mobile_companion.py`
+
+- idempotently patches the confirmed finished `BaseMainWindow` startup anchor
+- updates the sync-enabled desktop version to `1.0.11` by default
+- installs `MobileCompanionController` immediately after the normal initial refresh/undo bootstrap
+- creates one backup before changing a local frontend file
+- refuses to guess when the expected finished-frontend anchor is missing
+
+### Finished Windows frontend inspection
+
+The indexed finished frontend `frontend_2_8(20261009-160308).py` has now been inspected directly. It is Windows DID `1.0.10` and confirms the exact Phase 8 integration assumptions:
+
+- `BaseMainWindow.__init__` owns the active `character`
+- startup ends with `setup_keyboard_shortcuts()`, `refresh_all()`, and `reset_undo_history(treat_current_as_clean=True)`
+- `refresh_all()` is the canonical full-sheet refresh path
+- `mark_dirty(auto_save=True)` routes into the existing autosave/save path
+- the finished Tools menu contains New/Save/Load/Delete/Earlier Versions/Edit Abilities plus the Dice Roller submenu
+- the ordinary `Check for Updates` action is intentionally absent unless an update is actually available
+
+Because of this inspection, the frontend code integration no longer depends on guessing an insertion point. The integration patcher is anchored to the finished startup sequence and tested for idempotence.
 
 ### Android connection layer
 
@@ -125,7 +148,7 @@ Typed read-only view of the Windows snapshot including:
 
 ### Buildable Android application
 
-The Phase 8 branch now contains a complete Gradle Android application under `android/`, not only loose Kotlin source files:
+The Phase 8 branch contains a complete Gradle Android application under `android/`, not only loose Kotlin source files:
 
 - `android/settings.gradle.kts`
 - `android/build.gradle.kts`
@@ -174,7 +197,7 @@ The keystore itself is never committed. Android's signing identity must remain s
 - `updates/windows.json`
 - `updates/android.json`
 
-Android `0.8.0` currently targets the first sync-enabled Windows release, planned as `1.0.11`, using Sync Protocol v1. Android release URLs intentionally remain `null` until a signed APK is actually published. The currently published Windows `1.0.10` correctly advertises protocol `0` because it predates mobile sync.
+Android `0.8.0` targets the first sync-enabled Windows release, planned as `1.0.11`, using Sync Protocol v1. Android release URLs intentionally remain `null` until a signed APK is actually published. The currently published Windows `1.0.10` correctly advertises protocol `0` because it predates mobile sync.
 
 Validation cross-checks:
 
@@ -192,25 +215,24 @@ Validation cross-checks:
 `.github/workflows/phase8-validation.yml` performs three classes of checks:
 
 1. Python syntax + manifest/protocol/source-contract validation.
-2. Windows PySide6 sync/controller/adapter unit tests on `windows-latest`.
+2. Windows PySide6 sync/controller/adapter/integration-patcher unit tests on `windows-latest`.
 3. Real Android Gradle debug compilation on `ubuntu-latest`, with the APK uploaded as an Actions artifact when successful.
 
-Windows tests cover pairing/authentication, invalid/revoked credentials, malformed/oversized input, serializer failure handling, stale revisions, accepted/rejected commands, HP/AT/IP adapter behavior, read-only character rejection, automatic server startup, desktop-originated change detection, active-character switching and prevention of double-counting mobile-originated changes.
+Windows tests cover pairing/authentication, invalid/revoked credentials, malformed/oversized input, serializer failure handling, stale revisions, accepted/rejected commands, HP/AT/IP adapter behavior, read-only character rejection, automatic server startup, desktop-originated change detection, active-character switching, prevention of double-counting mobile-originated changes, finished Tools-menu detection and safe/idempotent frontend integration.
 
 ## Remaining integration boundary
 
-The Android Gradle project and Phase 8 Android application are now integrated on this branch. The remaining code integration boundary is the **latest finished Windows desktop source tree**.
+The transport, Android project, update/release workflows and finished-frontend integration contract are implemented on this branch. Remaining work that can be automated before device testing is primarily packaging/release validation against the full local Windows build tree.
 
-The latest Windows source ZIP is already present in the conversation and has been materialized, so it does not need to be uploaded again. The current execution runtime, however, is failing to open/extract that ZIP programmatically. Because the finished desktop app changed after the individually indexed source revisions, the final bootstrap into `frontend_2_8.py`, packaging/spec update and installer build should not be guessed against an older revision.
-
-Once the latest archive can be programmatically inspected, the remaining desktop work is intentionally small:
+For the sync-enabled Windows build the required source-tree changes are now intentionally small:
 
 - place the Phase 8 Windows modules beside the finished frontend/backend
-- instantiate `install_mobile_companion(window, CharacterStorageSystem, APP_VERSION)` at the correct main-window bootstrap point
-- ensure shutdown occurs with the window lifecycle
-- include QR/runtime modules in the PyInstaller/installer packaging
-- set the first sync-enabled Windows release/version metadata consistently
-- run the existing DID release tests plus the Phase 8 tests against the real finished source
+- run `windows/integrate_mobile_companion.py frontend_2_8.py --version 1.0.11`
+- install/include `windows/mobile_companion_requirements.txt`
+- keep the existing frontend Tools-menu and close lifecycle code unchanged; the controller handles both integration points externally
+- ensure the existing PyInstaller/installer inputs collect the newly imported modules and `qrcode` dependency
+- run the existing DID release tests plus the Phase 8 tests against the integrated source tree
+- publish Windows `1.0.11` before publishing Android `0.8.0`, because Android declares `1.0.11` as its minimum compatible desktop release
 
 ## First end-to-end acceptance test
 
