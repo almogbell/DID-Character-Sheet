@@ -269,7 +269,11 @@ class DidSyncClient(
             "command_ok" -> {
                 val requestId = message.optString("request_id")
                 val rev = message.optInt("revision", revision)
-                main.post { listener.onCommandAccepted(requestId, rev) }
+                // Advance immediately, before the following canonical state
+                // message arrives. This prevents a very fast second tap from
+                // being sent with the already-stale pre-command revision.
+                revision = maxOf(revision, rev)
+                main.post { listener.onCommandAccepted(requestId, revision) }
             }
             "command_error" -> {
                 val requestId = message.optString("request_id").nonBlankOrNull()
