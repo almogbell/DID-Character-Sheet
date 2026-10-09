@@ -1,120 +1,194 @@
-# Phase 8 implementation
+# Phase 8 implementation status
 
-This branch contains the first real Windows↔Android companion foundation.
+Phase 8 changes DID Android from a copied-character-file prototype into a connected mobile companion for the finished Windows application. Windows is authoritative for character rules and saved data; Android displays canonical Windows snapshots and sends allowed commands back to Windows.
 
-## Added code
+## Implemented on the Phase 8 branch
 
-### Windows
+### Windows companion transport
 
 `windows/mobile_sync_server.py`
 
-A PySide6 `QWebSocketServer` implementation which:
+- PySide6 `QWebSocketServer` on the LAN, default port `8765`
+- explicit first-time pairing
+- random short-lived one-time pairing token
+- permanent per-device credentials after pairing
+- private desktop app-data storage for paired devices
+- paired-device revocation
+- authenticated reconnects
+- sync protocol/version handshake
+- monotonically increasing state revisions
+- stale-command rejection
+- canonical state snapshots
+- authenticated HP / Adversity / IP command transport
 
-- listens on the LAN (default port 8765)
-- creates short-lived one-time pairing tokens
-- exchanges pairing tokens for persistent per-device credentials
-- stores paired devices in the desktop app-data folder
-- supports device revocation
-- authenticates reconnects
-- keeps a monotonic state revision
-- rejects stale commands
-- broadcasts canonical desktop character state
-- provides hooks for desktop-originated character changes
+### Windows desktop integration layer
 
-The server intentionally does **not** implement DID rules. The finished desktop app must supply:
+`windows/mobile_sync_frontend_adapter.py`
 
-```python
-MobileSyncServer(
-    desktop_version=APP_VERSION,
-    state_provider=...,   # return canonical current-character dict or None
-    command_handler=...,  # run existing desktop validation/mutation/save path
-)
-```
+- uses the desktop `CharacterStorageSystem.character_to_dict()` serializer as the canonical mobile snapshot
+- routes HP / Adversity / IP changes into the existing desktop character object
+- uses the normal `mark_dirty(auto_save=True)` persistence path
+- supports the finished frontend's `refresh_all()` path
+- rejects mutations when the desktop character is read-only
+- validates resource bounds before accepting phone commands
 
-`command_handler` is where HP/AT/IP commands must be routed through the existing finished application. Do not directly mutate values in `mobile_sync_server.py`.
+`windows/mobile_companion_controller.py`
 
-### Android transport
+- starts the companion server with the desktop app so previously paired phones can reconnect automatically
+- owns the adapter/server/pairing dialog
+- polls the canonical serialized desktop state every 500 ms
+- broadcasts desktop-originated state changes without adding networking calls to every existing desktop mutation function
+- detects active-character replacement separately
+- records mobile-originated state signatures before server broadcast so the same mutation is not counted twice
+
+`windows/mobile_companion_dialog.py`
+
+- starts explicit pairing
+- renders/copies pairing JSON and QR code
+- lists paired phones
+- revokes a paired phone
+- shows connected-device count/status
+
+`windows/mobile_companion_requirements.txt`
+
+- adds the QR-code packaging dependency
+
+### Android connection layer
 
 `android/phase8/DidSyncClient.kt`
 
-The Android companion client:
-
-- pairs from a QR JSON payload
-- stores the permanent device token in private SharedPreferences
-- reconnects to the saved PC
-- receives canonical `state` snapshots
-- tracks server revisions
-- rejects the assumption that a local edit is final until Windows broadcasts state
-- supports `resource.change` commands for the first Phase 8 slice
-
-It uses OkHttp WebSockets. The Android Gradle module needs:
-
-```kotlin
-implementation("com.squareup.okhttp3:okhttp:4.12.0")
-```
-
-### Android UI state
+- QR/manual pairing payload parser
+- private per-device credential storage
+- authenticated reconnect to a saved computer
+- canonical state reception
+- state revision tracking
+- stale/server rejection handling
+- HP / Adversity / IP commands
+- desktop version exposure for compatibility checks
 
 `android/phase8/DidCompanionViewModel.kt`
 
-- reconnects to a previously paired desktop on startup
-- exposes connection and canonical character state to Compose
-- disables edits while disconnected
-- sends HP / AT / IP commands through the sync client
-- re-fetches canonical state when Windows rejects a command
+- reconnects automatically with bounded retry delays
+- exposes connection state and canonical character state
+- parses typed `DidCharacterSnapshot`
+- disables mutations while disconnected or incompatible
+- enforces the minimum Windows version
+- re-fetches canonical state after rejected commands
 
-`android/phase8/CompanionConnectionScreen.kt`
+### Android canonical character model and UI
 
-- provides connection status and pairing/reconnect/forget controls
-- shows the current synchronized character
-- includes the first HP / AT / IP controls backed by the desktop connection
-- is deliberately small so it can be embedded in the existing DID phone-sheet UI rather than replacing that design
+`android/phase8/DidCharacterSnapshot.kt`
 
-### Android GitHub updates
+Typed read-only view of the Windows snapshot including:
+
+- character identity/backstory
+- all six stats/die sizes/bonuses
+- HP
+- Adversity Tokens
+- IP/level
+- Improvements and Empowerments
+- Improvement/Empowerment choices, including data needed for features such as Animal Buddy
+- Inventory
+- Notes, color/pin/link metadata
+- portrait/image data
+
+`android/phase8/DidCompanionSheet.kt`
+
+- phone navigation: Character / Equipment / Notes
+- Character tabs: Abilities / Improvements
+- HP / AT / IP controls backed by Windows commands
+- synchronized ability list
+- synchronized improvement/empowerment list
+- synchronized equipment list
+- synchronized note list
+- disconnected state remains read-only
+
+`android/phase8/Phase8CompanionRoot.kt`
+
+- single root surface choosing connection setup vs synchronized sheet
+- connection/read-only banner
+- reconnect/refresh path
+
+`android/phase8/PairingScanner.kt`
+
+- Google Code Scanner QR pairing helper
+- no custom camera preview required
+
+### GitHub Android update flow
 
 `android/phase8/GitHubUpdateChecker.kt`
 
-Reads:
-
-`https://raw.githubusercontent.com/almogbell/DID-Character-Sheet/main/updates/android.json`
-
-and reports whether a newer Android version exists.
+- reads `updates/android.json` from the repository
+- validates the Android manifest before trusting it
+- compares semantic-style app versions
+- exposes release notes, required desktop version, sync protocol and download/release URLs
 
 `android/phase8/AndroidUpdateController.kt`
 
-- coordinates update checks
-- exposes idle/checking/current/update/error states
-- opens the published APK or release URL through Android's normal security flow
+- update-check state machine
+- opens the published update through Android's normal install/download consent flow
+- refuses non-HTTPS or non-GitHub update links
 - does not attempt silent installation
 
 `android/phase8/UpdateNotice.kt`
 
-- Compose UI for update availability and retry behavior
-- displays GitHub-provided release notes when available
+- Compose update-available / retry UI
 
-## Still required before this is considered working end-to-end
+### GitHub update/compatibility manifests
 
-The latest finished Windows source must be wired to the callback interface above. In particular we must locate the exact current methods which:
+- `updates/windows.json`
+- `updates/android.json`
 
-1. serialize the active character,
-2. change HP,
-3. change Adversity Tokens,
-4. change Improvement Points,
-5. perform the normal save/autosave,
-6. refresh the desktop UI,
-7. fire when the active character changes.
+Android `0.8.0` currently targets the first sync-enabled Windows release, planned as `1.0.11`, using sync protocol `1`. Android release URLs intentionally remain `null` until a signed APK is actually published.
 
-Those integration points must be taken from the actual finished source rather than guessed from older revisions.
+`sync/validate_manifests.py` validates:
 
-The remaining Android integration work is:
+- platform/version/tag consistency
+- Windows/Android protocol agreement
+- Android code version vs manifest
+- Android minimum-desktop constant vs manifest
+- release URL consistency
+- that a published Android release never requires a Windows version newer than the advertised Windows release
 
-- QR scanner Activity / permission flow
-- embed `CompanionConnectionScreen` into the existing phone-sheet navigation
-- feed the synchronized character JSON into the existing Character / Equipment / Notes screens
-- wire the existing resource controls to `DidCompanionViewModel`
-- show `UpdateNotice` during startup/settings
-- publish the first signed Android APK and populate `updates/android.json`
+### Automated validation
 
-## Important behavior
+`.github/workflows/phase8-validation.yml` runs on the Phase 8 branch and relevant pull requests.
 
-The phone does not own `.didchar` files. When disconnected it may display cached state, but it is read-only. Windows remains authoritative at all times.
+Windows tests cover:
+
+- pairing/authentication
+- invalid/revoked credentials
+- stale revisions
+- accepted/rejected commands
+- HP / AT / IP adapter behavior
+- read-only character rejection
+- automatic server startup
+- desktop-originated change detection
+- active-character switching
+- prevention of double-counting mobile-originated changes
+
+## What is intentionally not complete yet
+
+The architecture and isolated Phase 8 modules are implemented, but two full-project integration/build steps still require the actual finished application trees:
+
+1. **Finished Windows frontend integration** — copy the Phase 8 Windows modules beside the current desktop source, instantiate `install_mobile_companion(...)`, add `Mobile Companion` to the existing Tools menu, include QR/WebSocket dependencies in packaging, and build/test the real installer.
+2. **Full Android Studio integration** — merge the Phase 8 source into the current Android project, wire the existing Activity to `Phase8CompanionRoot`, QR scanning and update notice/controller, add Gradle/network-security configuration, then compile/install on a real Android device.
+
+The user's latest Windows source ZIP and Phase 7 Android project are available in the conversation. Exact archive integration is pending only because the current execution runtime is not successfully opening/extracting those ZIPs; they do not need to be re-uploaded.
+
+## First end-to-end acceptance test
+
+When the integrated builds are ready, the first device test should verify this exact sequence:
+
+1. Launch sync-enabled Windows DID.
+2. Open Tools -> Mobile Companion -> Start pairing.
+3. Scan the QR code from Android.
+4. Confirm the current Windows character appears on Android.
+5. Change HP on Windows and confirm Android changes automatically.
+6. Change HP on Android and confirm Windows changes, saves through its normal path, and sends the canonical result back.
+7. Repeat for AT and IP.
+8. Switch character on Windows and confirm Android switches to the new canonical character.
+9. Disconnect Wi-Fi and confirm Android becomes read-only.
+10. Restore the network and confirm automatic reconnect plus a fresh canonical snapshot.
+
+No `.didchar` copy/import step is part of the Phase 8 acceptance flow.
