@@ -2,19 +2,23 @@
 
 Protocol version: `1`
 
-The desktop application is authoritative. Android sends commands; Windows validates, mutates, saves, and broadcasts canonical state.
+The Windows desktop application is authoritative. Android sends commands; Windows validates, mutates, saves through the existing desktop path, and broadcasts canonical state.
+
+The first planned released Windows build which speaks this protocol is `1.0.11`. Earlier Windows builds explicitly advertise sync protocol `0` in `updates/windows.json`.
 
 ## Transport
 
-Phase 8 uses the local network first.
+Phase 8 uses a LAN WebSocket connection on TCP port `8765` by default.
 
-- HTTP is used for pairing and basic discovery/health endpoints.
-- WebSocket is used for authenticated live synchronization.
-- Remote/Tailscale support may be added later without changing the character-state contract.
+The same WebSocket endpoint is used for first-time pairing and normal authenticated synchronization. The Windows companion server starts with the desktop application so already-paired phones can reconnect without opening the pairing dialog first.
+
+The server must not be exposed directly to the public internet. Remote/Tailscale support can be added later as a separate transport decision.
+
+Client-to-server text messages are limited to 64 KiB. Oversized input is rejected with `MESSAGE_TOO_LARGE` and the connection is closed. This limit applies to commands/pairing traffic, not to canonical state sent from Windows to Android; state may legitimately contain larger portrait/note data.
 
 ## Pairing
 
-The Windows app starts a temporary pairing session and shows a QR code containing:
+Pairing must be explicitly started from the Windows app. Windows creates a short-lived one-time token and displays a QR code containing:
 
 ```json
 {
@@ -22,23 +26,47 @@ The Windows app starts a temporary pairing session and shows a QR code containin
   "protocol": 1,
   "host": "192.168.1.20",
   "port": 8765,
-  "pairing_token": "short-lived-random-token"
+  "pairing_token": "short-lived-random-token",
+  "expires_at": 1791580000,
+  "server_id": "stable-random-server-id"
 }
 ```
 
-The pairing token must expire and must not be reused as the permanent device credential.
+The Android client accepts Phase 8 pairing/reconnect addresses only in private/link-local IPv4 ranges. It also rejects a pairing QR/pasted code whose `expires_at` has already passed.
 
-Android exchanges it for a persistent random device token and stores the paired computer identity locally.
+Android connects to `ws://HOST:PORT` and sends:
 
-## Authentication
+```json
+{
+  "type": "pair",
+  "protocol": 1,
+  "pairing_token": "short-lived-random-token",
+  "device_id": "stable-random-device-id",
+  "device_name": "Phone",
+  "android_version": "0.8.0"
+}
+```
 
-Every WebSocket connection must authenticate using the paired device token. Unknown/revoked tokens are rejected.
+Windows exchanges the temporary pairing token for a persistent device token:
 
-Windows must provide a UI to revoke paired devices.
+```json
+{
+  "type": "pair_ok",
+  "protocol": 1,
+  "device_id": "stable-random-device-id",
+  "device_token": "persistent-random-device-token",
+  "server_id": "stable-random-server-id",
+  "desktop_version": "1.0.11"
+}
+```
 
-## Connection hello
+The temporary pairing token expires and is invalidated after a successful pairing. It is never used as the permanent credential.
 
-Android sends:
+Malformed/non-numeric protocol values are treated as protocol mismatches rather than being allowed to raise through the WebSocket handler. Device identity/version fields are length-bounded before persistence.
+
+## Authentication / reconnect
+
+Android stores the paired computer address/identity and its device token in private app storage. On later connections it sends:
 
 ```json
 {
@@ -46,7 +74,8 @@ Android sends:
   "protocol": 1,
   "android_version": "0.8.0",
   "device_id": "stable-random-device-id",
-  "device_name": "Phone"
+  "device_name": "Phone",
+  "device_token": "persistent-random-device-token"
 }
 ```
 
@@ -56,16 +85,17 @@ Windows replies:
 {
   "type": "hello_ok",
   "protocol": 1,
-  "desktop_version": "1.0.10",
-  "server_id": "stable-random-server-id"
+  "desktop_version": "1.0.11",
+  "server_id": "stable-random-server-id",
+  "revision": 42
 }
 ```
 
-If protocol versions are incompatible, Windows returns an error and closes the connection.
+Unknown or revoked credentials are rejected. Incompatible protocol versions are rejected with a clear `PROTOCOL_MISMATCH` error. Android also rejects mutation access when the connected Windows version is older than `minimum_desktop_version` in `updates/android.json`.
 
 ## Canonical state
 
-After authentication, Windows sends a full state snapshot:
+After pairing/authentication Windows sends a full snapshot:
 
 ```json
 {
@@ -80,37 +110,27 @@ After authentication, Windows sends a full state snapshot:
     "Adversity": {},
     "progression": {},
     "stats": {},
-    "improvements": {},
-    "inventory": {},
-    "notes": []
+    "improvements": {"list_of_taken_improvements": []},
+    "inventory": {"list_of_items": []},
+    "notes": {"list_of_notes": []},
+    "image": {"images": []}
   }
 }
 ```
 
-The exact `character` payload should be produced from the current desktop model, not redefined independently by Android.
+The exact `character` payload is produced from the current desktop model/serializer. Android must not redefine or round-trip-save the character schema independently. The typed Android snapshot layer is a read-only view over this canonical data and preserves Improvement/Empowerment `choices` for features which depend on them.
 
-`revision` increases after every accepted mutation. Android replaces its displayed model from server state rather than treating its speculative local state as authoritative.
+`revision` increases after every accepted mutation. Android replaces its displayed state from server snapshots instead of treating speculative local edits as authoritative.
+
+If the desktop serializer temporarily cannot produce a canonical JSON-safe snapshot, the server returns `STATE_UNAVAILABLE` instead of letting the WebSocket callback crash. The client remains non-authoritative and must wait for/request a later canonical state.
 
 ## Commands
-
-A command envelope is:
 
 ```json
 {
   "type": "command",
   "request_id": "uuid",
   "base_revision": 42,
-  "action": "resource.change",
-  "payload": {}
-}
-```
-
-### Phase 8 actions
-
-#### Change HP
-
-```json
-{
   "action": "resource.change",
   "payload": {
     "resource": "HP",
@@ -119,27 +139,17 @@ A command envelope is:
 }
 ```
 
-#### Change Adversity Tokens
+Phase 8 initially supports desktop-validated changes for:
 
-```json
-{
-  "action": "resource.change",
-  "payload": {
-    "resource": "Adversity",
-    "delta": 1
-  }
-}
-```
+- `HP`
+- `Adversity`
+- Improvement Points (`IP`)
 
-#### Change Improvement Points
+Android never writes a `.didchar` file directly.
 
-The exact desktop-supported IP mutation semantics must be used. Android must not bypass desktop validation.
+### Accepted command
 
-## Accepted command
-
-Windows applies the command using the desktop model, saves through the normal desktop persistence path, increments the revision, and broadcasts canonical state.
-
-Optionally, it may first send:
+Windows validates, mutates, saves through the normal desktop persistence code, increments the revision, sends `command_ok`, then broadcasts canonical state:
 
 ```json
 {
@@ -149,9 +159,7 @@ Optionally, it may first send:
 }
 ```
 
-The subsequent `state` message remains authoritative.
-
-## Rejected command
+### Rejected command
 
 ```json
 {
@@ -163,19 +171,19 @@ The subsequent `state` message remains authoritative.
 }
 ```
 
-Android must revert any temporary visual change and use the latest server state.
+If `base_revision` is stale, Windows returns `STALE_REVISION` and immediately sends the current state.
+
+Read-only desktop characters reject all mobile mutations.
 
 ## Desktop-originated changes
 
-When the user changes the character in the Windows UI, the desktop sync service broadcasts a new `state` message to all authenticated companion clients.
+The desktop companion controller watches the canonical serialized desktop state. When the desktop application changes HP, AT, IP, improvements, inventory, notes, identity, portrait data, or another serialized field, the watcher detects the new state and broadcasts a fresh canonical snapshot. Existing desktop mutation functions therefore do not each need custom networking code.
 
-Android therefore does not need to poll for character changes.
+The controller records the post-command signature before the server broadcasts a mobile-originated mutation, preventing the watcher from counting the same change twice.
 
 ## Character switching
 
-Phase 8 may initially synchronize the single character currently active in the Windows application.
-
-When the desktop active character changes, Windows broadcasts:
+Phase 8 synchronizes the character currently active in the Windows application. When the active character ID changes, Windows sends:
 
 ```json
 {
@@ -184,28 +192,31 @@ When the desktop active character changes, Windows broadcasts:
 }
 ```
 
-followed by a full `state` snapshot.
-
-Multi-character independent mobile sessions can be added in a later protocol version if desired.
+followed by a complete `state` snapshot.
 
 ## Disconnect behavior
 
-Android may retain the last state for display, but while disconnected it is read-only. It must not queue gameplay edits which could create two competing character histories.
-
-On reconnect, Android requests and displays a fresh full state from Windows.
+Android may retain the last received state for display, but disconnected state is read-only. Gameplay mutations are not queued. On reconnect Android requests and receives a fresh state from Windows.
 
 ## Security requirements
 
-- Server binds only as broadly as required for LAN access.
-- Pairing must be explicitly initiated from Windows.
-- Pairing tokens expire quickly.
+- Pairing is explicitly initiated from Windows.
+- Pairing tokens are random, short-lived and one-time.
+- Android rejects expired pairing codes before attempting a connection.
+- Android Phase 8 accepts only local/private IPv4 pairing/reconnect hosts.
 - Permanent device tokens are random and revocable.
 - Character-changing commands require authentication.
-- Never place permanent credentials in GitHub update manifests.
-- Do not expose the desktop server directly to the public internet in Phase 8.
+- Read-only desktop characters reject mobile mutation commands.
+- Device credentials are stored only in private application storage.
+- Permanent credentials are never placed in GitHub manifests or QR codes after pairing.
+- Client-to-server messages are size-limited and malformed protocol values are handled without escaping the network callback.
+- Android update links must be HTTPS GitHub/GitHubusercontent links.
+- The Phase 8 server is LAN-only in intended deployment; do not port-forward it to the public internet.
 
 ## Update compatibility
 
-`updates/windows.json` and `updates/android.json` declare their supported sync protocol. Android also declares the minimum supported Windows application version.
+`updates/windows.json` describes the **currently published Windows release**, not the code merely under development. A pre-sync release uses protocol `0`.
 
-If protocol versions are incompatible, the connection is refused with a clear update message rather than attempting partial synchronization.
+`updates/android.json` declares Android's protocol and its minimum compatible Windows version. `sync/windows_protocol_compatibility.json` maps Windows release thresholds to protocol versions. GitHub Actions cross-check the server/client constants, manifests, Android Gradle version, compatibility table, protocol documentation and test vectors.
+
+A signed Android GitHub release is blocked until the currently advertised Windows release is at least Android's `minimum_desktop_version` and advertises the same protocol.

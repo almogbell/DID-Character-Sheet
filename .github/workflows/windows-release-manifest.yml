@@ -1,0 +1,58 @@
+name: Update Windows release manifest
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-manifest:
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Find Windows installer asset
+        id: asset
+        shell: bash
+        env:
+          ASSETS_JSON: ${{ toJson(github.event.release.assets) }}
+        run: |
+          URL="$(printf '%s' "$ASSETS_JSON" | jq -r '[.[] | select(.name | ascii_downcase | endswith(".exe"))][0].browser_download_url // empty')"
+          test -n "$URL" || { echo "Published Windows release has no .exe asset." >&2; exit 1; }
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+      - name: Update compatibility manifest
+        shell: bash
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"
+          python sync/update_windows_manifest_from_release.py \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --download-url "${{ steps.asset.outputs.url }}" \
+            --release-url "${{ github.event.release.html_url }}"
+          python sync/validate_manifests.py
+          python sync/validate_protocol_contract.py
+
+      - name: Commit manifest to main
+        shell: bash
+        run: |
+          if git diff --quiet -- updates/windows.json; then
+            echo "Windows manifest already matches the published release."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates/windows.json
+          git commit -m "Update Windows release manifest for ${{ github.event.release.tag_name }}"
+          git push origin main

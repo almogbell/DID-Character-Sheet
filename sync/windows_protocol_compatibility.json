@@ -1,0 +1,8 @@
+{
+  "protocol_releases": [
+    {
+      "minimum_windows_version": "1.0.11",
+      "sync_protocol": 1
+    }
+  ]
+}

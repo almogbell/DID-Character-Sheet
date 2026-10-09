@@ -1,0 +1,84 @@
+name: Phase 8 validation
+
+on:
+  push:
+    branches: [main, phase8-sync]
+    paths:
+      - "updates/**"
+      - "sync/**"
+      - "windows/**"
+      - "android/**"
+      - ".github/workflows/phase8-validation.yml"
+  pull_request:
+    paths:
+      - "updates/**"
+      - "sync/**"
+      - "windows/**"
+      - "android/**"
+      - ".github/workflows/phase8-validation.yml"
+
+jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile Phase 8 Python sources
+        run: python -m compileall -q sync windows
+      - name: Validate update manifests and Android protocol constants
+        run: python sync/validate_manifests.py
+      - name: Validate cross-platform sync protocol contract
+        run: python sync/validate_protocol_contract.py
+      - name: Validate Phase 8 Android source invariants
+        run: python sync/validate_android_phase8_sources.py
+      - name: Build Windows Phase 8 integration bundle
+        run: python sync/build_windows_phase8_bundle.py
+      - name: Upload Windows Phase 8 integration bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: did-phase8-windows-integration
+          path: dist/DID_Phase8_Windows_Integration.zip
+          if-no-files-found: error
+
+  sync-server-tests:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install sync test dependency
+        run: python -m pip install PySide6
+      - name: Run Phase 8 Windows sync and integration tests
+        run: >-
+          python -m unittest
+          windows.test_mobile_sync_server
+          windows.test_mobile_sync_frontend_adapter
+          windows.test_mobile_companion_controller
+          windows.test_integrate_mobile_companion
+          -v
+
+  android-debug-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Build Android debug APK
+        working-directory: android
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: did-android-phase8-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
