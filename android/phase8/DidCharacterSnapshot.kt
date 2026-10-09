@@ -13,6 +13,10 @@ data class DidCharacterSnapshot(
     val hp: HpSnapshot,
     val adversity: AdversitySnapshot,
     val progression: ProgressionSnapshot,
+    val bdv: Int,
+    val dr: Int,
+    val defenseStatName: String?,
+    val combatModeEnabled: Boolean,
     val improvements: List<ImprovementSnapshot>,
     val inventory: List<InventoryItemSnapshot>,
     val notes: List<NoteSnapshot>,
@@ -21,10 +25,11 @@ data class DidCharacterSnapshot(
     companion object {
         fun fromJson(json: JSONObject): DidCharacterSnapshot {
             val statsObject = json.optJSONObject("stats") ?: JSONObject()
-            val stats = statsObject.keys().asSequence().map { statName ->
-                val stat = statsObject.optJSONObject(statName) ?: JSONObject()
+            val stats = statsObject.keys().asSequence().map { statKey ->
+                val stat = statsObject.optJSONObject(statKey) ?: JSONObject()
                 StatSnapshot(
-                    name = statName,
+                    key = statKey,
+                    name = statKey.displayStatName(),
                     dieSize = stat.optInt("die_size", 0),
                     bonus = stat.optInt("bonus", 0),
                 )
@@ -41,6 +46,15 @@ data class DidCharacterSnapshot(
                 ?.optJSONArray("list_of_notes") ?: JSONArray()
             val imageJson = json.optJSONObject("image") ?: JSONObject()
 
+            val defenseKey = json.optString("selected_defense_stat_name")
+                .nonBlankOrNull()
+                ?.takeIf { selected -> stats.any { it.key == selected } }
+                ?: stats.maxWithOrNull(
+                    compareBy<StatSnapshot> { it.dieSize }.thenBy { it.bonus }
+                )?.key
+            val defenseStat = stats.firstOrNull { it.key == defenseKey }
+            val maxAt = atJson.optInt("max_AT", 0)
+
             return DidCharacterSnapshot(
                 id = json.optString("id").nonBlankOrNull(),
                 name = json.optString("name", "Unnamed character"),
@@ -54,13 +68,17 @@ data class DidCharacterSnapshot(
                 ),
                 adversity = AdversitySnapshot(
                     current = atJson.optInt("current_AT", 0),
-                    max = atJson.optInt("max_AT", 0),
+                    max = maxAt,
                 ),
                 progression = ProgressionSnapshot(
                     currentIp = progressionJson.optInt("current_IP", 0),
                     usedIp = progressionJson.optInt("used_IP", 0),
                     level = progressionJson.optInt("level", 1),
                 ),
+                bdv = maxAt / 2,
+                dr = defenseStat?.let { (it.dieSize / 2) + it.bonus } ?: 0,
+                defenseStatName = defenseStat?.name,
+                combatModeEnabled = json.optBoolean("combat_mode_enabled", false),
                 improvements = improvementsJson.mapObjects(::parseImprovement),
                 inventory = inventoryJson.mapObjects { item ->
                     InventoryItemSnapshot(
@@ -83,7 +101,8 @@ data class DidCharacterSnapshot(
                     )
                 },
                 portrait = PortraitSnapshot(
-                    images = imageJson.optJSONArray("images").toStringList(),
+                    images = imageJson.optJSONArray("images").portraitImages(),
+                    currentIndex = imageJson.optInt("current_index", 0),
                     offsetX = imageJson.optDouble("offset_x", 0.0),
                     offsetY = imageJson.optDouble("offset_y", 0.0),
                     scale = imageJson.optDouble("scale", 1.0),
@@ -122,7 +141,7 @@ data class DidCharacterSnapshot(
     }
 }
 
-data class StatSnapshot(val name: String, val dieSize: Int, val bonus: Int)
+data class StatSnapshot(val key: String, val name: String, val dieSize: Int, val bonus: Int)
 data class HpSnapshot(val current: Int, val max: Int, val maxHearts: Int)
 data class AdversitySnapshot(val current: Int, val max: Int)
 data class ProgressionSnapshot(val currentIp: Int, val usedIp: Int, val level: Int)
@@ -165,12 +184,17 @@ data class NoteSnapshot(
     val pinned: Boolean,
     val linkedImprovementId: String?,
 )
+data class PortraitImageSnapshot(val id: String?, val data: String)
 data class PortraitSnapshot(
-    val images: List<String>,
+    val images: List<PortraitImageSnapshot>,
+    val currentIndex: Int,
     val offsetX: Double,
     val offsetY: Double,
     val scale: Double,
-)
+) {
+    val currentImage: PortraitImageSnapshot?
+        get() = images.getOrNull(currentIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0)))
+}
 
 private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> = buildList {
     for (i in 0 until length()) {
@@ -178,17 +202,34 @@ private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<
     }
 }
 
-private fun JSONArray?.toStringList(): List<String> {
+private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
     if (this == null) return emptyList()
     return buildList {
         for (i in 0 until length()) {
             when (val item = opt(i)) {
-                is String -> add(item)
-                is JSONObject -> item.optString("display").nonBlankOrNull()?.let(::add)
+                is String -> item.nonBlankOrNull()?.let {
+                    add(PortraitImageSnapshot(id = null, data = it))
+                }
+                is JSONObject -> item.optString("display").nonBlankOrNull()?.let { data ->
+                    add(
+                        PortraitImageSnapshot(
+                            id = item.optString("id").nonBlankOrNull(),
+                            data = data,
+                        )
+                    )
+                }
             }
         }
     }
 }
+
+private fun String.displayStatName(): String =
+    replace('_', ' ')
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { part ->
+            part.lowercase().replaceFirstChar { it.titlecase() }
+        }
 
 private fun String.nonBlankOrNull(): String? = takeIf { it.isNotBlank() }
 private fun JSONObject.copyJson(): JSONObject = JSONObject(toString())
