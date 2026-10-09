@@ -28,10 +28,11 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         val lastError: String? = null,
         val pendingRequestIds: Set<String> = emptySet(),
         val protocolMismatchDesktopVersion: String? = null,
+        val minimumVersionProblem: String? = null,
         val reconnectingAutomatically: Boolean = false,
     ) {
         val isConnected: Boolean
-            get() = connection is DidSyncClient.ConnectionState.Connected
+            get() = connection is DidSyncClient.ConnectionState.Connected && minimumVersionProblem == null
 
         val isReadOnly: Boolean
             get() = !isConnected
@@ -54,8 +55,6 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     private var allowAutoReconnect = true
 
     init {
-        // Normal startup path: reconnect to the previously paired desktop.
-        // If no computer has ever been paired, connectSaved simply returns false.
         syncClient.connectSaved()
     }
 
@@ -63,7 +62,13 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         val payload = DidSyncClient.PairingPayload.fromQrJson(qrJson)
         allowAutoReconnect = true
         cancelRetry()
-        _uiState.update { it.copy(lastError = null, protocolMismatchDesktopVersion = null) }
+        _uiState.update {
+            it.copy(
+                lastError = null,
+                protocolMismatchDesktopVersion = null,
+                minimumVersionProblem = null,
+            )
+        }
         syncClient.pair(payload)
     }
 
@@ -71,7 +76,13 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         allowAutoReconnect = true
         retryAttempt = 0
         cancelRetry()
-        _uiState.update { it.copy(lastError = null, protocolMismatchDesktopVersion = null) }
+        _uiState.update {
+            it.copy(
+                lastError = null,
+                protocolMismatchDesktopVersion = null,
+                minimumVersionProblem = null,
+            )
+        }
         if (!syncClient.connectSaved()) {
             _uiState.update {
                 it.copy(lastError = "No paired computer is saved. Pair this phone from the Windows DID app first.")
@@ -91,14 +102,14 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun changeHp(delta: Int) = submitResourceChange("HP", delta)
-
     fun changeAdversity(delta: Int) = submitResourceChange("Adversity", delta)
-
     fun changeImprovementPoints(delta: Int) = submitResourceChange("IP", delta)
 
     private fun submitResourceChange(resource: String, delta: Int) {
         if (!_uiState.value.isConnected) {
-            _uiState.update { it.copy(lastError = "The computer is not connected. Reconnect before changing the character.") }
+            _uiState.update {
+                it.copy(lastError = it.minimumVersionProblem ?: "The computer is not connected. Reconnect before changing the character.")
+            }
             return
         }
         val requestId = syncClient.changeResource(resource, delta)
@@ -106,9 +117,28 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     override fun onConnectionState(state: DidSyncClient.ConnectionState) {
+        if (state is DidSyncClient.ConnectionState.Connected) {
+            val desktopVersion = state.desktopVersion
+            if (desktopVersion != null && compareVersions(desktopVersion, MINIMUM_DESKTOP_VERSION) < 0) {
+                allowAutoReconnect = false
+                cancelRetry()
+                val message = "Windows DID $MINIMUM_DESKTOP_VERSION or newer is required. The connected computer is running $desktopVersion."
+                _uiState.update {
+                    it.copy(
+                        connection = state,
+                        minimumVersionProblem = message,
+                        lastError = message,
+                        reconnectingAutomatically = false,
+                    )
+                }
+                return
+            }
+        }
+
         _uiState.update { current ->
             current.copy(
                 connection = state,
+                minimumVersionProblem = null,
                 lastError = if (state is DidSyncClient.ConnectionState.Error) state.message else current.lastError,
                 reconnectingAutomatically = false,
             )
@@ -134,9 +164,8 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
                 revision = revision,
                 character = character,
                 snapshot = typedSnapshot,
-                lastError = null,
+                lastError = if (it.minimumVersionProblem == null) null else it.lastError,
                 reconnectingAutomatically = false,
-                // A canonical state supersedes all optimistic/pending assumptions.
                 pendingRequestIds = emptySet(),
             )
         }
@@ -158,13 +187,10 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
                 lastError = message,
             )
         }
-        // Always re-fetch canonical state after a rejection.
         syncClient.requestFreshState()
     }
 
     override fun onProtocolMismatch(desktopVersion: String?) {
-        // A protocol mismatch will not heal through network retries. Stop trying
-        // until the user updates one of the applications or explicitly reconnects.
         allowAutoReconnect = false
         cancelRetry()
         _uiState.update {
@@ -186,10 +212,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
             _uiState.update { it.copy(reconnectingAutomatically = false) }
             if (!allowAutoReconnect) return@launch
             val hasSavedComputer = syncClient.connectSaved()
-            if (!hasSavedComputer) {
-                // No pairing exists, so repeated retries would serve no purpose.
-                allowAutoReconnect = false
-            }
+            if (!hasSavedComputer) allowAutoReconnect = false
         }
     }
 
@@ -207,8 +230,20 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     companion object {
-        // Keep this independent from the Windows application version.
         const val ANDROID_VERSION = "0.8.0"
+        const val MINIMUM_DESKTOP_VERSION = "1.0.10"
         private val RETRY_SECONDS = intArrayOf(2, 4, 8, 16, 30)
+
+        internal fun compareVersions(a: String, b: String): Int {
+            val left = a.trim().removePrefix("v").split('.')
+            val right = b.trim().removePrefix("v").split('.')
+            val max = maxOf(left.size, right.size)
+            for (i in 0 until max) {
+                val x = left.getOrNull(i)?.takeWhile { it.isDigit() }?.toIntOrNull() ?: 0
+                val y = right.getOrNull(i)?.takeWhile { it.isDigit() }?.toIntOrNull() ?: 0
+                if (x != y) return x.compareTo(y)
+            }
+            return 0
+        }
     }
 }
