@@ -33,6 +33,8 @@ jobs:
         run: python sync/validate_protocol_contract.py
       - name: Validate Android companion source invariants
         run: python sync/validate_android_phase8_sources.py
+      - name: Validate Phase 9 mobile parity invariants
+        run: python sync/validate_phase9_mobile.py
       - name: Build Windows Phase 8 integration bundle
         run: python sync/build_windows_phase8_bundle.py
       - name: Upload Windows Phase 8 integration bundle
