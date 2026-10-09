@@ -41,6 +41,8 @@ jobs:
         run: python sync/validate_manifests.py
       - name: Validate cross-platform sync protocol contract
         run: python sync/validate_protocol_contract.py
+      - name: Validate Phase 8 Android source invariants
+        run: python sync/validate_android_phase8_sources.py
 
   sync-server-tests:
     runs-on: windows-latest
