@@ -108,9 +108,13 @@ def validate() -> None:
         major, minor, patch = core.split(".")
         return int(major), int(minor), int(patch)
 
-    if parts(minimum_desktop) > parts(windows_version):
+    # During development an unpublished Android build may target the next
+    # sync-enabled Windows release. Once Android has real release/download URLs,
+    # that required Windows version must already be the advertised Windows release
+    # (or older), otherwise users could download an unusable Android build.
+    if android_download is not None and parts(minimum_desktop) > parts(windows_version):
         raise AssertionError(
-            "android.minimum_desktop_version cannot be newer than updates/windows.json"
+            "Published Android release requires a Windows version newer than updates/windows.json"
         )
 
     code_version, code_protocol, code_minimum_desktop = extract_android_code_constants()
