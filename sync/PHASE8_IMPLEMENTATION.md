@@ -33,7 +33,7 @@ MobileSyncServer(
 
 `command_handler` is where HP/AT/IP commands must be routed through the existing finished application. Do not directly mutate values in `mobile_sync_server.py`.
 
-### Android
+### Android transport
 
 `android/phase8/DidSyncClient.kt`
 
@@ -53,6 +53,25 @@ It uses OkHttp WebSockets. The Android Gradle module needs:
 implementation("com.squareup.okhttp3:okhttp:4.12.0")
 ```
 
+### Android UI state
+
+`android/phase8/DidCompanionViewModel.kt`
+
+- reconnects to a previously paired desktop on startup
+- exposes connection and canonical character state to Compose
+- disables edits while disconnected
+- sends HP / AT / IP commands through the sync client
+- re-fetches canonical state when Windows rejects a command
+
+`android/phase8/CompanionConnectionScreen.kt`
+
+- provides connection status and pairing/reconnect/forget controls
+- shows the current synchronized character
+- includes the first HP / AT / IP controls backed by the desktop connection
+- is deliberately small so it can be embedded in the existing DID phone-sheet UI rather than replacing that design
+
+### Android GitHub updates
+
 `android/phase8/GitHubUpdateChecker.kt`
 
 Reads:
@@ -61,7 +80,19 @@ Reads:
 
 and reports whether a newer Android version exists.
 
-## Still required before this is considered working
+`android/phase8/AndroidUpdateController.kt`
+
+- coordinates update checks
+- exposes idle/checking/current/update/error states
+- opens the published APK or release URL through Android's normal security flow
+- does not attempt silent installation
+
+`android/phase8/UpdateNotice.kt`
+
+- Compose UI for update availability and retry behavior
+- displays GitHub-provided release notes when available
+
+## Still required before this is considered working end-to-end
 
 The latest finished Windows source must be wired to the callback interface above. In particular we must locate the exact current methods which:
 
@@ -75,13 +106,14 @@ The latest finished Windows source must be wired to the callback interface above
 
 Those integration points must be taken from the actual finished source rather than guessed from older revisions.
 
-The Android UI also still needs:
+The remaining Android integration work is:
 
-- QR scanning screen
-- connection-state screen
-- pairing/revoke UX
-- wiring its existing HP/AT/IP controls to `DidSyncClient`
-- update-available dialog and APK install flow
+- QR scanner Activity / permission flow
+- embed `CompanionConnectionScreen` into the existing phone-sheet navigation
+- feed the synchronized character JSON into the existing Character / Equipment / Notes screens
+- wire the existing resource controls to `DidCompanionViewModel`
+- show `UpdateNotice` during startup/settings
+- publish the first signed Android APK and populate `updates/android.json`
 
 ## Important behavior
 
