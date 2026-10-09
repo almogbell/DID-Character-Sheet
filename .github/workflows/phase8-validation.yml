@@ -8,6 +8,7 @@ on:
       - "sync/**"
       - "windows/mobile_sync_server.py"
       - "windows/test_mobile_sync_server.py"
+      - "android/phase8/**"
       - ".github/workflows/phase8-validation.yml"
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - "sync/**"
       - "windows/mobile_sync_server.py"
       - "windows/test_mobile_sync_server.py"
+      - "android/phase8/**"
       - ".github/workflows/phase8-validation.yml"
 
 jobs:
@@ -25,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Validate update manifests
+      - name: Validate update manifests and Android protocol constants
         run: python sync/validate_manifests.py
 
   sync-server-tests:
