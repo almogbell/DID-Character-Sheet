@@ -47,22 +47,52 @@ class DidSyncClient(
         val port: Int,
         val pairingToken: String,
         val serverId: String?,
+        val expiresAtEpochSeconds: Long?,
     ) {
         companion object {
             fun fromQrJson(text: String): PairingPayload {
                 val json = JSONObject(text)
                 require(json.optString("type") == "did_pairing") { "Not a DID pairing code" }
                 require(json.optInt("protocol", -1) == PROTOCOL) { "Unsupported DID sync protocol" }
+
                 val host = json.getString("host").trim()
                 val port = json.getInt("port")
+                val token = json.getString("pairing_token").trim()
+                val expires = if (json.has("expires_at")) json.optLong("expires_at", 0L) else 0L
+
                 require(host.isNotBlank()) { "Pairing code has no computer address" }
+                require(isAllowedLanIpv4(host)) {
+                    "For Phase 8, the Windows computer must use a private local-network address."
+                }
                 require(port in 1..65535) { "Pairing code has an invalid port" }
+                require(token.length >= 20) { "Pairing code has an invalid token" }
+                if (expires > 0L) {
+                    require(System.currentTimeMillis() / 1000L < expires) {
+                        "This pairing code has expired. Start pairing again on Windows."
+                    }
+                }
+
                 return PairingPayload(
                     host = host,
                     port = port,
-                    pairingToken = json.getString("pairing_token"),
+                    pairingToken = token,
                     serverId = json.optString("server_id").ifBlank { null },
+                    expiresAtEpochSeconds = expires.takeIf { it > 0L },
                 )
+            }
+
+            internal fun isAllowedLanIpv4(host: String): Boolean {
+                val parts = host.split('.')
+                if (parts.size != 4) return false
+                val octets = parts.map { it.toIntOrNull() ?: return false }
+                if (octets.any { it !in 0..255 }) return false
+                val a = octets[0]
+                val b = octets[1]
+                return a == 10 ||
+                    (a == 172 && b in 16..31) ||
+                    (a == 192 && b == 168) ||
+                    (a == 169 && b == 254) ||
+                    a == 127
             }
         }
     }
@@ -90,13 +120,18 @@ class DidSyncClient(
         val host = prefs.getString(KEY_HOST, null) ?: return false
         val port = prefs.getInt(KEY_PORT, -1)
         val token = prefs.getString(KEY_DEVICE_TOKEN, null) ?: return false
-        if (port <= 0 || token.isBlank()) return false
+        if (!PairingPayload.isAllowedLanIpv4(host) || port !in 1..65535 || token.isBlank()) return false
         pendingPairing = null
         connectSocket(host, port)
         return true
     }
 
     fun pair(payload: PairingPayload) {
+        val expires = payload.expiresAtEpochSeconds
+        if (expires != null && System.currentTimeMillis() / 1000L >= expires) {
+            emit(ConnectionState.Error("This pairing code has expired. Start pairing again on Windows."))
+            return
+        }
         pendingPairing = payload
         emit(ConnectionState.Pairing)
         connectSocket(payload.host, payload.port)
@@ -207,6 +242,7 @@ class DidSyncClient(
                 val token = message.getString("device_token")
                 val serverId = message.optString("server_id").ifBlank { pairing.serverId }
                 val desktopVersion = message.optString("desktop_version").ifBlank { null }
+                require(token.length >= 20) { "Computer returned an invalid device credential" }
                 prefs.edit()
                     .putString(KEY_HOST, pairing.host)
                     .putInt(KEY_PORT, pairing.port)
