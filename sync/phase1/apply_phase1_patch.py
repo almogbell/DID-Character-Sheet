@@ -189,6 +189,12 @@ def replace_once(text, needle, replacement, label):
     return text.replace(needle, replacement, 1)
 
 
+def copy_if_needed(source, target):
+    if source.resolve() == target.resolve():
+        return
+    shutil.copy2(source, target)
+
+
 def main():
     root = find_project_root()
     frontend = find_frontend(root)
@@ -229,9 +235,9 @@ def main():
         shutil.copy2(frontend, backup)
         print(f"Backup:   {backup.name}")
 
-    shutil.copy2(module_source, module_target)
+    copy_if_needed(module_source, module_target)
     if tests_dir.is_dir():
-        shutil.copy2(test_source, test_target)
+        copy_if_needed(test_source, test_target)
 
     frontend.write_text(text, encoding="utf-8")
 
