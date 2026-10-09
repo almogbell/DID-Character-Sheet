@@ -12,6 +12,7 @@ from campaign_cloud import CampaignCloudClient, CampaignCloudError
 
 
 STATE_DEBOUNCE_MS = 1200
+RETRY_INTERVAL_MS = 10000
 MAX_PENDING_ROLLS = 200
 
 
@@ -48,6 +49,15 @@ def initialize_campaign_runtime(window):
     window._campaign_state_timer.timeout.connect(
         lambda: _submit_state_sync(window)
     )
+
+    # If the internet disappears, retain the newest state and pending rolls.
+    # Re-try quietly; the ordinary desktop character sheet remains usable.
+    window._campaign_retry_timer = QTimer(window)
+    window._campaign_retry_timer.setInterval(RETRY_INTERVAL_MS)
+    window._campaign_retry_timer.timeout.connect(
+        lambda: retry_campaign_sync(window)
+    )
+    window._campaign_retry_timer.start()
 
     if hasattr(window, "set_shared_roll_event_callback"):
         window.set_shared_roll_event_callback(
@@ -104,6 +114,20 @@ def sync_current_character_now(window):
         return False
     _submit_state_sync(window)
     return True
+
+
+def retry_campaign_sync(window):
+    if not current_character_link(window):
+        return
+
+    status = campaign_sync_status(window)
+    pending_rolls = getattr(window, "_campaign_pending_rolls", None)
+    has_pending_rolls = bool(pending_rolls)
+
+    if status in {"Offline", "Sync error", "Pending sync"}:
+        _submit_state_sync(window)
+    elif has_pending_rolls:
+        _submit_roll_flush(window)
 
 
 def queue_campaign_roll(window, event):
