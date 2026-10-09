@@ -29,10 +29,13 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         val pendingRequestIds: Set<String> = emptySet(),
         val protocolMismatchDesktopVersion: String? = null,
         val minimumVersionProblem: String? = null,
+        val snapshotProblem: String? = null,
         val reconnectingAutomatically: Boolean = false,
     ) {
         val isConnected: Boolean
-            get() = connection is DidSyncClient.ConnectionState.Connected && minimumVersionProblem == null
+            get() = connection is DidSyncClient.ConnectionState.Connected &&
+                minimumVersionProblem == null &&
+                snapshotProblem == null
 
         val isReadOnly: Boolean
             get() = !isConnected
@@ -67,6 +70,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
                 lastError = null,
                 protocolMismatchDesktopVersion = null,
                 minimumVersionProblem = null,
+                snapshotProblem = null,
             )
         }
         syncClient.pair(payload)
@@ -81,6 +85,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
                 lastError = null,
                 protocolMismatchDesktopVersion = null,
                 minimumVersionProblem = null,
+                snapshotProblem = null,
             )
         }
         if (!syncClient.connectSaved()) {
@@ -98,7 +103,9 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun refresh() {
-        if (_uiState.value.isConnected) syncClient.requestFreshState()
+        if (_uiState.value.connection is DidSyncClient.ConnectionState.Connected) {
+            syncClient.requestFreshState()
+        }
     }
 
     fun changeHp(delta: Int) = submitResourceChange("HP", delta)
@@ -108,7 +115,11 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     private fun submitResourceChange(resource: String, delta: Int) {
         if (!_uiState.value.isConnected) {
             _uiState.update {
-                it.copy(lastError = it.minimumVersionProblem ?: "The computer is not connected. Reconnect before changing the character.")
+                it.copy(
+                    lastError = it.snapshotProblem
+                        ?: it.minimumVersionProblem
+                        ?: "The computer is not connected. Reconnect before changing the character."
+                )
             }
             return
         }
@@ -158,13 +169,40 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     override fun onCharacterState(revision: Int, character: JSONObject?) {
-        val typedSnapshot = character?.let { runCatching { DidCharacterSnapshot.fromJson(it) }.getOrNull() }
-        _uiState.update {
-            it.copy(
+        if (character == null) {
+            _uiState.update {
+                it.copy(
+                    revision = revision,
+                    character = null,
+                    snapshot = null,
+                    snapshotProblem = null,
+                    lastError = if (it.minimumVersionProblem == null) null else it.lastError,
+                    reconnectingAutomatically = false,
+                    pendingRequestIds = emptySet(),
+                )
+            }
+            return
+        }
+
+        val parsed = runCatching { DidCharacterSnapshot.fromJson(character) }
+        val parsedSnapshot = parsed.getOrNull()
+        val parseProblem = parsed.exceptionOrNull()?.let {
+            "The computer sent character data this Android version cannot read. Update both DID apps and refresh."
+        }
+
+        _uiState.update { current ->
+            current.copy(
                 revision = revision,
                 character = character,
-                snapshot = typedSnapshot,
-                lastError = if (it.minimumVersionProblem == null) null else it.lastError,
+                // Keep the last renderable snapshot if a newer canonical payload
+                // cannot be parsed, but make it read-only until a valid state arrives.
+                snapshot = parsedSnapshot ?: current.snapshot,
+                snapshotProblem = parseProblem,
+                lastError = when {
+                    parseProblem != null -> parseProblem
+                    current.minimumVersionProblem != null -> current.lastError
+                    else -> null
+                },
                 reconnectingAutomatically = false,
                 pendingRequestIds = emptySet(),
             )
