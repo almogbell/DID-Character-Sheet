@@ -101,6 +101,7 @@ data class DidCharacterSnapshot(
                     cost = empowerment.optInt("cost", 0),
                     description = empowerment.optString("description", ""),
                     source = empowerment.optString("source", ""),
+                    choices = empowerment.optJSONObject("choices")?.copyJson(),
                 )
             } ?: emptyList()
 
@@ -111,6 +112,7 @@ data class DidCharacterSnapshot(
                 cost = json.optInt("cost", 0),
                 description = json.optString("description", ""),
                 source = json.optString("source", ""),
+                choices = json.optJSONObject("choices")?.copyJson(),
                 expanded = json.optBoolean("expanded", true),
                 timesTaken = json.optInt("times_taken", 1),
                 sortOrder = json.optInt("sort_order", 0),
@@ -131,6 +133,7 @@ data class ImprovementSnapshot(
     val cost: Int,
     val description: String,
     val source: String,
+    val choices: JSONObject?,
     val expanded: Boolean,
     val timesTaken: Int,
     val sortOrder: Int,
@@ -144,6 +147,7 @@ data class EmpowermentSnapshot(
     val cost: Int,
     val description: String,
     val source: String,
+    val choices: JSONObject?,
 )
 data class InventoryItemSnapshot(
     val id: String?,
@@ -185,3 +189,5 @@ private fun JSONArray?.toStringList(): List<String> {
         }
     }
 }
+
+private fun JSONObject.copyJson(): JSONObject = JSONObject(toString())
