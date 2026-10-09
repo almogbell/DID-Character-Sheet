@@ -38,9 +38,13 @@ class FakeWindow:
         c.progression.current_IP = 3
         self.character = c
         self.dirty_calls = []
+        self.readonly = False
 
     def mark_dirty(self, auto_save=False):
         self.dirty_calls.append(auto_save)
+
+    def is_readonly_character(self):
+        return self.readonly
 
 
 class AdapterTests(unittest.TestCase):
@@ -67,6 +71,13 @@ class AdapterTests(unittest.TestCase):
         with self.assertRaises(MobileSyncValidationError):
             self.adapter.command_handler("resource.change", {"resource": "IP", "delta": -4}, 0, "x")
         self.assertEqual(self.window.character.progression.current_IP, 3)
+
+    def test_readonly_character_rejects_mobile_mutation(self):
+        self.window.readonly = True
+        with self.assertRaises(MobileSyncValidationError):
+            self.adapter.command_handler("resource.change", {"resource": "HP", "delta": -1}, 0, "x")
+        self.assertEqual(self.window.character.HP.current_HP, 6)
+        self.assertEqual(self.window.dirty_calls, [])
 
     def test_explicit_hooks_override_fallback_mutation(self):
         calls = []
