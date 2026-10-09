@@ -231,7 +231,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
 
     companion object {
         const val ANDROID_VERSION = "0.8.0"
-        const val MINIMUM_DESKTOP_VERSION = "1.0.10"
+        const val MINIMUM_DESKTOP_VERSION = "1.0.11"
         private val RETRY_SECONDS = intArrayOf(2, 4, 8, 16, 30)
 
         internal fun compareVersions(a: String, b: String): Int {
