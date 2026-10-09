@@ -31,24 +31,35 @@ def require_protocol(value: object, field: str, *, allow_zero: bool = False) -> 
     return value
 
 
-def extract_android_code_constants() -> tuple[str, int, str]:
+def extract_android_code_constants() -> tuple[str, int, str, str]:
     view_model = (ROOT / "android" / "phase8" / "DidCompanionViewModel.kt").read_text(
         encoding="utf-8"
     )
     sync_client = (ROOT / "android" / "phase8" / "DidSyncClient.kt").read_text(
         encoding="utf-8"
     )
+    app_gradle = (ROOT / "android" / "app" / "build.gradle.kts").read_text(
+        encoding="utf-8"
+    )
 
     version_match = re.search(r'const\s+val\s+ANDROID_VERSION\s*=\s*"([^"]+)"', view_model)
     minimum_match = re.search(r'const\s+val\s+MINIMUM_DESKTOP_VERSION\s*=\s*"([^"]+)"', view_model)
     protocol_match = re.search(r"const\s+val\s+PROTOCOL\s*=\s*(\d+)", sync_client)
+    gradle_version_match = re.search(r'versionName\s*=\s*"([^"]+)"', app_gradle)
     if not version_match:
         raise AssertionError("Could not find ANDROID_VERSION in DidCompanionViewModel.kt")
     if not minimum_match:
         raise AssertionError("Could not find MINIMUM_DESKTOP_VERSION in DidCompanionViewModel.kt")
     if not protocol_match:
         raise AssertionError("Could not find PROTOCOL in DidSyncClient.kt")
-    return version_match.group(1), int(protocol_match.group(1)), minimum_match.group(1)
+    if not gradle_version_match:
+        raise AssertionError("Could not find versionName in android/app/build.gradle.kts")
+    return (
+        version_match.group(1),
+        int(protocol_match.group(1)),
+        minimum_match.group(1),
+        gradle_version_match.group(1),
+    )
 
 
 def version_parts(version: str) -> tuple[int, int, int]:
@@ -132,11 +143,18 @@ def validate() -> None:
                 "Published Android release and advertised Windows release use different sync protocols"
             )
 
-    code_version, code_protocol, code_minimum_desktop = extract_android_code_constants()
+    code_version, code_protocol, code_minimum_desktop, gradle_version = (
+        extract_android_code_constants()
+    )
     if code_version != android_version:
         raise AssertionError(
             "Android code version and updates/android.json differ "
             f"(code={code_version}, manifest={android_version})"
+        )
+    if gradle_version != android_version:
+        raise AssertionError(
+            "Android Gradle versionName and updates/android.json differ "
+            f"(gradle={gradle_version}, manifest={android_version})"
         )
     if code_protocol != android_protocol:
         raise AssertionError(
