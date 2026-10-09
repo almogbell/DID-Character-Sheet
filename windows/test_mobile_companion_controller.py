@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QCoreApplication, QObject
+from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from windows.mobile_companion_controller import MobileCompanionController
 
@@ -30,7 +30,7 @@ class FakeStorage:
         }
 
 
-class FakeWindow(QObject):
+class FakeWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.character = self._character("c1")
@@ -96,10 +96,11 @@ class FakeServer:
 class ControllerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        cls.app = QApplication.instance() or QApplication([])
 
     def make_controller(self):
         self.window = FakeWindow()
+        self.addCleanup(self.window.deleteLater)
         patcher = patch("windows.mobile_companion_controller.MobileSyncServer", FakeServer)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -141,6 +142,29 @@ class ControllerTests(unittest.TestCase):
         controller._poll_desktop_state()
         self.assertEqual(controller.server.desktop_changes, 0)
         self.assertEqual(controller.server.character_changes, 0)
+
+    def test_tools_menu_gets_mobile_companion_action_once(self):
+        controller = self.make_controller()
+        menu = QMenu(self.window)
+        menu.addAction("New Character")
+        menu.addAction("Load Character")
+        check = menu.addAction("Check for Updates")
+        menu.addAction("How to Use")
+
+        controller._maybe_add_tools_action(menu)
+        controller._maybe_add_tools_action(menu)
+
+        texts = [action.text() for action in menu.actions()]
+        self.assertEqual(texts.count("Mobile Companion"), 1)
+        self.assertLess(texts.index("Mobile Companion"), texts.index(check.text()))
+
+    def test_unrelated_menu_is_not_modified(self):
+        controller = self.make_controller()
+        menu = QMenu(self.window)
+        menu.addAction("Delete")
+        menu.addAction("Rename")
+        controller._maybe_add_tools_action(menu)
+        self.assertNotIn("Mobile Companion", [action.text() for action in menu.actions()])
 
 
 if __name__ == "__main__":
