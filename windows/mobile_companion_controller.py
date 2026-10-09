@@ -1,6 +1,6 @@
 """High-level installer/controller for Phase 8 mobile companion support.
 
-The controller keeps finished-frontend changes intentionally small.  It owns the
+The controller keeps finished-frontend changes intentionally small. It owns the
 adapter/server/dialog and watches the canonical desktop character state for
 changes, so existing HP/AT/IP/UI code does not need to be individually patched
 just to notify Android.
@@ -14,9 +14,14 @@ from typing import Any, Optional
 
 from PySide6.QtCore import QObject, QTimer
 
-from mobile_companion_dialog import MobileCompanionDialog
-from mobile_sync_frontend_adapter import DesktopSyncAdapter, FrontendHooks
-from mobile_sync_server import MobileSyncServer
+try:  # package imports used by tests / repository tooling
+    from .mobile_companion_dialog import MobileCompanionDialog
+    from .mobile_sync_frontend_adapter import DesktopSyncAdapter, FrontendHooks
+    from .mobile_sync_server import MobileSyncServer
+except ImportError:  # sibling imports used by the packaged desktop app
+    from mobile_companion_dialog import MobileCompanionDialog
+    from mobile_sync_frontend_adapter import DesktopSyncAdapter, FrontendHooks
+    from mobile_sync_server import MobileSyncServer
 
 
 class MobileCompanionController(QObject):
@@ -93,7 +98,7 @@ class MobileCompanionController(QObject):
     ) -> None:
         self.adapter.command_handler(action, payload, base_revision, request_id)
         # MobileSyncServer will increment/broadcast immediately after this
-        # callback returns.  Capture the new signature here so the poller does
+        # callback returns. Capture the new signature here so the poller does
         # not interpret the same mobile mutation as a second desktop mutation.
         self._capture_baseline()
 
