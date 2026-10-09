@@ -108,6 +108,10 @@ class ControllerTests(unittest.TestCase):
             window=self.window,
             storage_system=FakeStorage,
             app_version="1.0.10",
+            # Global QApplication filters are useful in the real app but make
+            # headless Qt unit-test teardown unnecessarily fragile. The menu
+            # injection helper is tested directly below.
+            install_tools_event_filter=False,
         )
         self.addCleanup(controller.shutdown)
         return controller
