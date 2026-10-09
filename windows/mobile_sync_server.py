@@ -27,6 +27,12 @@ from PySide6.QtWebSockets import QWebSocket, QWebSocketServer
 SYNC_PROTOCOL = 1
 DEFAULT_PORT = 8765
 PAIRING_TTL_SECONDS = 300
+MAX_INBOUND_MESSAGE_BYTES = 64 * 1024
+MAX_DEVICE_ID_CHARS = 128
+MAX_DEVICE_NAME_CHARS = 120
+MAX_VERSION_CHARS = 64
+MAX_REQUEST_ID_CHARS = 128
+MAX_ACTION_CHARS = 96
 
 StateProvider = Callable[[], Optional[dict]]
 CommandHandler = Callable[[str, dict, int, str], None]
@@ -64,7 +70,7 @@ class MobileSyncServer(QObject):
         parent: Optional[QObject] = None,
     ) -> None:
         super().__init__(parent)
-        self.desktop_version = str(desktop_version)
+        self.desktop_version = str(desktop_version)[:MAX_VERSION_CHARS]
         self.state_provider = state_provider
         self.command_handler = command_handler
         self.port = int(port)
@@ -83,8 +89,13 @@ class MobileSyncServer(QObject):
 
         self._settings_path = self._default_settings_path()
         self._settings = self._load_settings()
-        self._server_id = self._settings.setdefault("server_id", str(uuid.uuid4()))
-        self._settings.setdefault("devices", {})
+        server_id = self._settings.get("server_id")
+        if not isinstance(server_id, str) or not server_id.strip():
+            server_id = str(uuid.uuid4())
+            self._settings["server_id"] = server_id
+        self._server_id = server_id
+        if not isinstance(self._settings.get("devices"), dict):
+            self._settings["devices"] = {}
         self._save_settings()
 
     # ------------------------------------------------------------------
@@ -142,6 +153,8 @@ class MobileSyncServer(QObject):
     def paired_devices(self) -> list[dict]:
         result = []
         for device_id, data in self._settings.get("devices", {}).items():
+            if not isinstance(data, dict):
+                continue
             result.append(
                 {
                     "device_id": device_id,
@@ -150,7 +163,7 @@ class MobileSyncServer(QObject):
                     "last_seen": data.get("last_seen"),
                 }
             )
-        return sorted(result, key=lambda item: item.get("device_name", "").lower())
+        return sorted(result, key=lambda item: str(item.get("device_name", "")).lower())
 
     def revoke_device(self, device_id: str) -> bool:
         devices = self._settings.get("devices", {})
@@ -178,7 +191,8 @@ class MobileSyncServer(QObject):
 
     def notify_active_character_changed(self) -> None:
         self._revision += 1
-        state = self._safe_state()
+        state_message = self._state_message()
+        state = state_message.get("character") if state_message.get("type") == "state" else None
         char_id = state.get("id") if isinstance(state, dict) else None
         self._broadcast(
             {
@@ -187,7 +201,7 @@ class MobileSyncServer(QObject):
                 "character_id": char_id,
             }
         )
-        self.broadcast_state()
+        self._broadcast(state_message)
 
     def broadcast_state(self) -> None:
         self._broadcast(self._state_message())
@@ -219,9 +233,15 @@ class MobileSyncServer(QObject):
         if client is None:
             ws.close()
             return
+
+        if len(text.encode("utf-8")) > MAX_INBOUND_MESSAGE_BYTES:
+            self._send(ws, {"type": "error", "code": "MESSAGE_TOO_LARGE"})
+            ws.close()
+            return
+
         try:
             message = json.loads(text)
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, TypeError):
             self._send(ws, {"type": "error", "code": "INVALID_JSON"})
             return
         if not isinstance(message, dict):
@@ -248,7 +268,7 @@ class MobileSyncServer(QObject):
             self._send(ws, {"type": "error", "code": "UNKNOWN_MESSAGE"})
 
     def _handle_pair(self, client: ConnectedClient, message: dict) -> None:
-        if int(message.get("protocol", -1)) != SYNC_PROTOCOL:
+        if not self._protocol_matches(message):
             self._send(client.socket, self._protocol_error())
             client.socket.close()
             return
@@ -261,8 +281,11 @@ class MobileSyncServer(QObject):
             self._send(client.socket, {"type": "pair_error", "code": "PAIRING_EXPIRED_OR_INVALID"})
             return
 
-        device_id = str(message.get("device_id") or uuid.uuid4())
-        device_name = str(message.get("device_name") or "Phone")[:120]
+        device_id = self._bounded_text(message.get("device_id"), MAX_DEVICE_ID_CHARS)
+        if not device_id:
+            device_id = str(uuid.uuid4())
+        device_name = self._bounded_text(message.get("device_name") or "Phone", MAX_DEVICE_NAME_CHARS)
+        android_version = self._bounded_text(message.get("android_version"), MAX_VERSION_CHARS)
         permanent_token = secrets.token_urlsafe(32)
         now = int(time.time())
         self._settings["devices"][device_id] = {
@@ -277,7 +300,7 @@ class MobileSyncServer(QObject):
         client.authenticated = True
         client.device_id = device_id
         client.device_name = device_name
-        client.android_version = str(message.get("android_version", ""))
+        client.android_version = android_version
         self._send(
             client.socket,
             {
@@ -293,21 +316,28 @@ class MobileSyncServer(QObject):
         self.clientCountChanged.emit(self._authenticated_client_count())
 
     def _handle_hello(self, client: ConnectedClient, message: dict) -> None:
-        if int(message.get("protocol", -1)) != SYNC_PROTOCOL:
+        if not self._protocol_matches(message):
             self._send(client.socket, self._protocol_error())
             client.socket.close()
             return
-        device_id = str(message.get("device_id", ""))
+        device_id = self._bounded_text(message.get("device_id"), MAX_DEVICE_ID_CHARS)
         supplied = str(message.get("device_token", ""))
         saved = self._settings.get("devices", {}).get(device_id)
-        if not saved or not supplied or not secrets.compare_digest(supplied, str(saved.get("token", ""))):
+        if (
+            not isinstance(saved, dict)
+            or not supplied
+            or not secrets.compare_digest(supplied, str(saved.get("token", "")))
+        ):
             self._send(client.socket, {"type": "hello_error", "code": "NOT_PAIRED"})
             return
 
         client.authenticated = True
         client.device_id = device_id
-        client.device_name = str(message.get("device_name") or saved.get("device_name") or "Phone")[:120]
-        client.android_version = str(message.get("android_version", ""))
+        client.device_name = self._bounded_text(
+            message.get("device_name") or saved.get("device_name") or "Phone",
+            MAX_DEVICE_NAME_CHARS,
+        )
+        client.android_version = self._bounded_text(message.get("android_version"), MAX_VERSION_CHARS)
         saved["device_name"] = client.device_name
         saved["last_seen"] = int(time.time())
         self._save_settings()
@@ -325,10 +355,13 @@ class MobileSyncServer(QObject):
         self.clientCountChanged.emit(self._authenticated_client_count())
 
     def _handle_command(self, client: ConnectedClient, message: dict) -> None:
-        request_id = str(message.get("request_id") or uuid.uuid4())
+        request_id = self._bounded_text(
+            message.get("request_id") or uuid.uuid4(),
+            MAX_REQUEST_ID_CHARS,
+        )
         try:
             base_revision = int(message.get("base_revision", -1))
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             base_revision = -1
         if base_revision != self._revision:
             self._send(
@@ -344,7 +377,7 @@ class MobileSyncServer(QObject):
             self._send(client.socket, self._state_message())
             return
 
-        action = str(message.get("action", ""))
+        action = self._bounded_text(message.get("action"), MAX_ACTION_CHARS)
         payload = message.get("payload", {})
         if not isinstance(payload, dict):
             payload = {}
@@ -380,11 +413,22 @@ class MobileSyncServer(QObject):
     # Helpers
     # ------------------------------------------------------------------
     def _state_message(self) -> dict:
+        try:
+            character = self._safe_state()
+        except Exception as exc:
+            self.statusChanged.emit(f"Mobile companion state unavailable: {exc}")
+            return {
+                "type": "error",
+                "code": "STATE_UNAVAILABLE",
+                "protocol": SYNC_PROTOCOL,
+                "revision": self._revision,
+                "message": "Desktop character state is temporarily unavailable.",
+            }
         return {
             "type": "state",
             "protocol": SYNC_PROTOCOL,
             "revision": self._revision,
-            "character": self._safe_state(),
+            "character": character,
         }
 
     def _safe_state(self) -> Optional[dict]:
@@ -413,6 +457,17 @@ class MobileSyncServer(QObject):
             "protocol": SYNC_PROTOCOL,
             "desktop_version": self.desktop_version,
         }
+
+    @staticmethod
+    def _protocol_matches(message: dict) -> bool:
+        try:
+            return int(message.get("protocol", -1)) == SYNC_PROTOCOL
+        except (TypeError, ValueError, OverflowError):
+            return False
+
+    @staticmethod
+    def _bounded_text(value: Any, limit: int) -> str:
+        return str(value if value is not None else "")[: max(0, int(limit))]
 
     def _authenticated_client_count(self) -> int:
         return sum(1 for client in self._clients.values() if client.authenticated)
@@ -452,5 +507,8 @@ class MobileSyncServer(QObject):
 
     def _save_settings(self) -> None:
         tmp = self._settings_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self._settings, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.write_text(
+            json.dumps(self._settings, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
         tmp.replace(self._settings_path)
