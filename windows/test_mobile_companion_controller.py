@@ -3,9 +3,14 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QMenu, QWidget
+from PySide6.QtCore import QCoreApplication, QObject
 
-from windows.mobile_companion_controller import MobileCompanionController
+from windows.mobile_companion_controller import (
+    MobileCompanionController,
+    is_did_tools_menu,
+    mobile_companion_insert_index,
+    normalize_menu_text,
+)
 
 
 class Box:
@@ -30,7 +35,7 @@ class FakeStorage:
         }
 
 
-class FakeWindow(QWidget):
+class FakeWindow(QObject):
     def __init__(self):
         super().__init__()
         self.character = self._character("c1")
@@ -96,11 +101,12 @@ class FakeServer:
 class ControllerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QApplication.instance() or QApplication([])
+        # Controller state/polling only needs QtCore. Avoid constructing QWidget
+        # objects on a headless Windows runner.
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
 
     def make_controller(self):
         self.window = FakeWindow()
-        self.addCleanup(self.window.deleteLater)
         patcher = patch("windows.mobile_companion_controller.MobileSyncServer", FakeServer)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -108,9 +114,6 @@ class ControllerTests(unittest.TestCase):
             window=self.window,
             storage_system=FakeStorage,
             app_version="1.0.10",
-            # Global QApplication filters are useful in the real app but make
-            # headless Qt unit-test teardown unnecessarily fragile. The menu
-            # injection helper is tested directly below.
             install_tools_event_filter=False,
         )
         self.addCleanup(controller.shutdown)
@@ -147,28 +150,31 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(controller.server.desktop_changes, 0)
         self.assertEqual(controller.server.character_changes, 0)
 
-    def test_tools_menu_gets_mobile_companion_action_once(self):
-        controller = self.make_controller()
-        menu = QMenu(self.window)
-        menu.addAction("New Character")
-        menu.addAction("Load Character")
-        check = menu.addAction("Check for Updates")
-        menu.addAction("How to Use")
+    def test_tools_menu_signature_and_insert_position_are_pure(self):
+        actions = [
+            "New Character",
+            "Save Character",
+            "Load Character",
+            "Edit Abilities",
+            "Check for Updates",
+            "How to Use",
+        ]
+        self.assertTrue(is_did_tools_menu(actions))
+        self.assertEqual(mobile_companion_insert_index(actions), 4)
 
-        controller._maybe_add_tools_action(menu)
-        controller._maybe_add_tools_action(menu)
+        with_mobile = actions[:4] + ["Mobile Companion"] + actions[4:]
+        self.assertIsNone(mobile_companion_insert_index(with_mobile))
 
-        texts = [action.text() for action in menu.actions()]
-        self.assertEqual(texts.count("Mobile Companion"), 1)
-        self.assertLess(texts.index("Mobile Companion"), texts.index(check.text()))
+    def test_unrelated_menu_is_rejected(self):
+        actions = ["Delete", "Rename"]
+        self.assertFalse(is_did_tools_menu(actions))
+        self.assertIsNone(mobile_companion_insert_index(actions))
 
-    def test_unrelated_menu_is_not_modified(self):
-        controller = self.make_controller()
-        menu = QMenu(self.window)
-        menu.addAction("Delete")
-        menu.addAction("Rename")
-        controller._maybe_add_tools_action(menu)
-        self.assertNotIn("Mobile Companion", [action.text() for action in menu.actions()])
+    def test_qt_mnemonics_do_not_break_tools_menu_detection(self):
+        actions = ["&Load Character", "Check for &Updates"]
+        self.assertEqual(normalize_menu_text("Check for &Updates"), "Check for Updates")
+        self.assertTrue(is_did_tools_menu(actions))
+        self.assertEqual(mobile_companion_insert_index(actions), 1)
 
 
 if __name__ == "__main__":
