@@ -19,14 +19,35 @@ def extract_int(pattern: str, text: str, label: str) -> int:
 
 
 def version_key(value: str) -> tuple[int, int, int]:
-    core = value.split("-", 1)[0].split("+", 1)[0]
+    core = value.strip().removeprefix("v").split("-", 1)[0].split("+", 1)[0]
     return tuple(int(part) for part in core.split("."))
+
+
+def protocol_from_table(table: dict, version: str) -> int:
+    selected = 0
+    previous_minimum = None
+    previous_protocol = -1
+    for rule in table.get("protocol_releases", []):
+        minimum = str(rule["minimum_windows_version"])
+        protocol = int(rule["sync_protocol"])
+        if protocol < 1:
+            raise AssertionError("Compatibility-table protocols must start at 1")
+        if previous_minimum is not None and version_key(minimum) <= version_key(previous_minimum):
+            raise AssertionError("Windows protocol compatibility rules must be ordered by version")
+        if protocol <= previous_protocol:
+            raise AssertionError("Windows protocol compatibility numbers must increase")
+        if version_key(version) >= version_key(minimum):
+            selected = protocol
+        previous_minimum = minimum
+        previous_protocol = protocol
+    return selected
 
 
 def validate() -> None:
     windows_manifest = json.loads(read("updates/windows.json"))
     android_manifest = json.loads(read("updates/android.json"))
     vectors = json.loads(read("sync/test-vectors.json"))
+    compatibility = json.loads(read("sync/windows_protocol_compatibility.json"))
 
     server = read("windows/mobile_sync_server.py")
     client = read("android/phase8/DidSyncClient.kt")
@@ -48,6 +69,21 @@ def validate() -> None:
     windows_release_protocol = int(windows_manifest["sync_protocol"])
     windows_version = str(windows_manifest["version"])
     minimum_desktop = str(android_manifest["minimum_desktop_version"])
+
+    table_release_protocol = protocol_from_table(compatibility, windows_version)
+    if table_release_protocol != windows_release_protocol:
+        raise AssertionError(
+            "updates/windows.json does not match windows_protocol_compatibility.json "
+            f"(manifest={windows_release_protocol}, table={table_release_protocol})"
+        )
+
+    required_protocol_at_android_minimum = protocol_from_table(compatibility, minimum_desktop)
+    if required_protocol_at_android_minimum != protocol:
+        raise AssertionError(
+            "Android minimum_desktop_version does not map to its active sync protocol "
+            f"(minimum={minimum_desktop}, table={required_protocol_at_android_minimum}, code={protocol})"
+        )
+
     if version_key(windows_version) >= version_key(minimum_desktop):
         if windows_release_protocol != protocol:
             raise AssertionError(
