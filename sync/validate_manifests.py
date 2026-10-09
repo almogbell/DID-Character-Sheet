@@ -29,6 +29,23 @@ def require_protocol(value: object, field: str) -> int:
     return value
 
 
+def extract_android_code_constants() -> tuple[str, int]:
+    view_model = (ROOT / "android" / "phase8" / "DidCompanionViewModel.kt").read_text(
+        encoding="utf-8"
+    )
+    sync_client = (ROOT / "android" / "phase8" / "DidSyncClient.kt").read_text(
+        encoding="utf-8"
+    )
+
+    version_match = re.search(r'const\s+val\s+ANDROID_VERSION\s*=\s*"([^"]+)"', view_model)
+    protocol_match = re.search(r"const\s+val\s+PROTOCOL\s*=\s*(\d+)", sync_client)
+    if not version_match:
+        raise AssertionError("Could not find ANDROID_VERSION in DidCompanionViewModel.kt")
+    if not protocol_match:
+        raise AssertionError("Could not find PROTOCOL in DidSyncClient.kt")
+    return version_match.group(1), int(protocol_match.group(1))
+
+
 def validate() -> None:
     windows = load("windows.json")
     android = load("android.json")
@@ -93,6 +110,18 @@ def validate() -> None:
     if parts(minimum_desktop) > parts(windows_version):
         raise AssertionError(
             "android.minimum_desktop_version cannot be newer than updates/windows.json"
+        )
+
+    code_version, code_protocol = extract_android_code_constants()
+    if code_version != android_version:
+        raise AssertionError(
+            "Android code version and updates/android.json differ "
+            f"(code={code_version}, manifest={android_version})"
+        )
+    if code_protocol != android_protocol:
+        raise AssertionError(
+            "DidSyncClient.PROTOCOL and updates/android.json differ "
+            f"(code={code_protocol}, manifest={android_protocol})"
         )
 
     print(
