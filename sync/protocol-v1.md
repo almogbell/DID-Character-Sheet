@@ -8,7 +8,7 @@ The Windows desktop application is authoritative. Android sends commands; Window
 
 Phase 8 uses a LAN WebSocket connection on TCP port `8765` by default.
 
-The same WebSocket endpoint is used for first-time pairing and normal authenticated synchronization. This avoids adding a second HTTP server to the desktop application. Discovery/health endpoints may be added later without changing the character-state contract.
+The same WebSocket endpoint is used for first-time pairing and normal authenticated synchronization. The Windows companion server starts with the desktop application so already-paired phones can reconnect without opening the pairing dialog first.
 
 The server must not be exposed directly to the public internet. Remote/Tailscale support can be added later.
 
@@ -83,7 +83,7 @@ Windows replies:
 }
 ```
 
-Unknown or revoked credentials are rejected. Incompatible protocol versions are rejected with a clear `PROTOCOL_MISMATCH` error.
+Unknown or revoked credentials are rejected. Incompatible protocol versions are rejected with a clear `PROTOCOL_MISMATCH` error. Android also rejects mutation access when the connected Windows version is older than `minimum_desktop_version` in `updates/android.json`.
 
 ## Canonical state
 
@@ -102,14 +102,15 @@ After pairing/authentication Windows sends a full snapshot:
     "Adversity": {},
     "progression": {},
     "stats": {},
-    "improvements": {},
-    "inventory": {},
-    "notes": []
+    "improvements": {"list_of_taken_improvements": []},
+    "inventory": {"list_of_items": []},
+    "notes": {"list_of_notes": []},
+    "image": {"images": []}
   }
 }
 ```
 
-The exact `character` payload is produced from the current desktop model/serializer. Android must not redefine the character schema independently.
+The exact `character` payload is produced from the current desktop model/serializer. Android must not redefine or round-trip-save the character schema independently.
 
 `revision` increases after every accepted mutation. Android replaces its displayed state from server snapshots instead of treating speculative local edits as authoritative.
 
@@ -132,7 +133,7 @@ Phase 8 initially supports desktop-validated changes for:
 
 - `HP`
 - `Adversity`
-- Improvement Points, using the exact mutation semantics exposed by the finished desktop application
+- Improvement Points (`IP`)
 
 Android never writes a `.didchar` file directly.
 
@@ -162,13 +163,17 @@ Windows validates, mutates, saves through the normal desktop persistence code, i
 
 If `base_revision` is stale, Windows returns `STALE_REVISION` and immediately sends the current state.
 
+Read-only desktop characters reject all mobile mutations.
+
 ## Desktop-originated changes
 
-After a desktop-side mutation is saved, the desktop integration calls `notify_desktop_change()`. The sync service increments its revision and broadcasts a new state to all authenticated companion clients.
+The desktop companion controller watches the canonical serialized desktop state. When the desktop application changes HP, AT, IP, improvements, inventory, notes, identity, portrait data, or another serialized field, the watcher detects the new state and broadcasts a fresh canonical snapshot. Existing desktop mutation functions therefore do not each need custom networking code.
+
+The controller records the post-command signature before the server broadcasts a mobile-originated mutation, preventing the watcher from counting the same change twice.
 
 ## Character switching
 
-Phase 8 synchronizes the character currently active in the Windows application. When that character changes, Windows sends:
+Phase 8 synchronizes the character currently active in the Windows application. When the active character ID changes, Windows sends:
 
 ```json
 {
@@ -181,7 +186,7 @@ followed by a complete `state` snapshot.
 
 ## Disconnect behavior
 
-Android may cache the last received state for display, but disconnected state is read-only. Gameplay mutations are not queued. On reconnect Android receives a fresh state from Windows.
+Android may retain the last received state for display, but disconnected state is read-only. Gameplay mutations are not queued. On reconnect Android requests and receives a fresh state from Windows.
 
 ## Security requirements
 
@@ -195,4 +200,4 @@ Android may cache the last received state for display, but disconnected state is
 
 ## Update compatibility
 
-`updates/windows.json` and `updates/android.json` declare the supported sync protocol. Android also declares the minimum supported Windows application version. Protocol mismatch produces an update message instead of partial synchronization.
+`updates/windows.json` and `updates/android.json` declare the supported sync protocol. Android also declares the minimum supported Windows application version. The same Android version/protocol/minimum-desktop constants are validated in CI so the code and GitHub manifest cannot drift silently.
