@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DID — DM Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">DID CHARACTER SHEET</div>
+        <h1>DM Dashboard</h1>
+      </div>
+      <div class="topbar-actions">
+        <span id="connectionBadge" class="status-badge neutral">Connecting…</span>
+        <select id="campaignSelect" class="campaign-select" aria-label="Campaign"></select>
+        <button id="refreshBtn" class="secondary">Refresh</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="claimPanel" class="claim-panel hidden">
+        <div class="claim-card">
+          <h2>Connect this browser as DM</h2>
+          <p>Open the dashboard from the campaign window in the desktop app. The one-time access code is valid for 10 minutes.</p>
+          <div class="claim-row">
+            <input id="claimCode" autocomplete="one-time-code" placeholder="Dashboard access code">
+            <button id="claimBtn">Connect</button>
+          </div>
+          <div id="claimError" class="error-text"></div>
+        </div>
+      </section>
+
+      <section id="dashboardContent" class="hidden">
+        <section class="session-panel">
+          <div class="session-main">
+            <div>
+              <div class="eyebrow">SESSION MODE</div>
+              <h2 id="sessionTitle">No active session</h2>
+              <div id="sessionStatus" class="summary-text">Start a session to group rolls and capture party snapshots.</div>
+            </div>
+            <div class="session-actions">
+              <button id="startSessionBtn" class="primary-action">Start Session</button>
+              <button id="endSessionBtn" class="danger-action hidden">End Session</button>
+            </div>
+          </div>
+          <div class="session-history-row">
+            <label for="sessionSelect">Roll view</label>
+            <select id="sessionSelect" class="session-select"></select>
+            <button id="viewSnapshotsBtn" class="secondary" disabled>View Snapshots</button>
+            <span id="snapshotSummary" class="summary-text"></span>
+          </div>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">LIVE PARTY</div>
+            <h2 id="campaignTitle">Campaign</h2>
+          </div>
+          <div id="partySummary" class="summary-text"></div>
+        </div>
+
+        <div id="partyGrid" class="party-grid"></div>
+
+        <section class="rolls-section">
+          <div class="section-heading compact">
+            <div>
+              <div id="rollEyebrow" class="eyebrow">SESSION</div>
+              <h2 id="rollTitle">Recent Rolls</h2>
+            </div>
+            <div id="rollCount" class="summary-text"></div>
+          </div>
+          <div id="rollList" class="roll-list"></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="characterDialog" class="character-dialog">
+    <button id="dialogClose" class="dialog-close" aria-label="Close">×</button>
+    <div id="characterDialogBody"></div>
+  </dialog>
+
+  <dialog id="snapshotDialog" class="character-dialog snapshot-dialog">
+    <button id="snapshotDialogClose" class="dialog-close" aria-label="Close">×</button>
+    <div id="snapshotDialogBody"></div>
+  </dialog>
+
+  <script src="config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>
