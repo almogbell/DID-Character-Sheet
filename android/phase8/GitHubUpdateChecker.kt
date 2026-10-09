@@ -7,7 +7,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
-/** Reads the Android update manifest from the DID GitHub repository. */
+/** Reads and validates the Android update manifest from the DID GitHub repository. */
 class GitHubUpdateChecker(
     private val currentVersion: String,
     private val manifestUrl: String = DEFAULT_MANIFEST_URL,
@@ -33,6 +33,7 @@ class GitHubUpdateChecker(
                     requestMethod = "GET"
                     setRequestProperty("Accept", "application/json")
                     setRequestProperty("Cache-Control", "no-cache")
+                    setRequestProperty("User-Agent", "DID-Character-Sheet-Android/$currentVersion")
                 }
                 try {
                     if (connection.responseCode !in 200..299) {
@@ -40,14 +41,23 @@ class GitHubUpdateChecker(
                     }
                     val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
                     val json = JSONObject(text)
-                    val available = json.getString("version")
+                    require(json.optString("platform") == "android") {
+                        "The update manifest is not for the Android app."
+                    }
+                    val available = json.getString("version").trim()
+                    require(available.matches(Regex("\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?"))) {
+                        "The update manifest has an invalid Android version."
+                    }
+                    val protocol = json.getInt("sync_protocol")
+                    require(protocol > 0) { "The update manifest has an invalid sync protocol." }
+
                     if (compareVersions(available, currentVersion) <= 0) {
                         null
                     } else {
                         UpdateInfo(
                             version = available,
                             minimumDesktopVersion = json.optString("minimum_desktop_version").ifBlank { null },
-                            syncProtocol = json.optInt("sync_protocol", 1),
+                            syncProtocol = protocol,
                             downloadUrl = json.optString("download_url").ifBlank { null },
                             releaseUrl = json.optString("release_url").ifBlank { null },
                             releaseNotes = json.optString("release_notes").ifBlank { null },
