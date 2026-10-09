@@ -39,6 +39,8 @@ jobs:
           python-version: "3.12"
       - name: Validate update manifests and Android protocol constants
         run: python sync/validate_manifests.py
+      - name: Validate cross-platform sync protocol contract
+        run: python sync/validate_protocol_contract.py
 
   sync-server-tests:
     runs-on: windows-latest
