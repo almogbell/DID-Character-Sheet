@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -34,8 +35,8 @@ import androidx.compose.ui.unit.dp
 /**
  * Phase 8 phone sheet backed exclusively by the canonical Windows snapshot.
  *
- * It intentionally does not own/save a .didchar file.  Resource controls only
- * emit commands to Windows.  Everything else is read-only until its matching
+ * It intentionally does not own/save a .didchar file. Resource controls only
+ * emit commands to Windows. Everything else is read-only until its matching
  * desktop command is added to Sync Protocol v1.
  */
 @Composable
