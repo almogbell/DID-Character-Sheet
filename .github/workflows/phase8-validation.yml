@@ -8,8 +8,11 @@ on:
       - "sync/**"
       - "windows/mobile_sync_server.py"
       - "windows/mobile_sync_frontend_adapter.py"
+      - "windows/mobile_companion_controller.py"
+      - "windows/mobile_companion_dialog.py"
       - "windows/test_mobile_sync_server.py"
       - "windows/test_mobile_sync_frontend_adapter.py"
+      - "windows/test_mobile_companion_controller.py"
       - "android/phase8/**"
       - ".github/workflows/phase8-validation.yml"
   pull_request:
@@ -18,8 +21,11 @@ on:
       - "sync/**"
       - "windows/mobile_sync_server.py"
       - "windows/mobile_sync_frontend_adapter.py"
+      - "windows/mobile_companion_controller.py"
+      - "windows/mobile_companion_dialog.py"
       - "windows/test_mobile_sync_server.py"
       - "windows/test_mobile_sync_frontend_adapter.py"
+      - "windows/test_mobile_companion_controller.py"
       - "android/phase8/**"
       - ".github/workflows/phase8-validation.yml"
 
@@ -43,5 +49,10 @@ jobs:
           python-version: "3.12"
       - name: Install sync test dependency
         run: python -m pip install PySide6
-      - name: Run mobile sync server and desktop adapter tests
-        run: python -m unittest windows.test_mobile_sync_server windows.test_mobile_sync_frontend_adapter -v
+      - name: Run Phase 8 Windows sync tests
+        run: >-
+          python -m unittest
+          windows.test_mobile_sync_server
+          windows.test_mobile_sync_frontend_adapter
+          windows.test_mobile_companion_controller
+          -v
