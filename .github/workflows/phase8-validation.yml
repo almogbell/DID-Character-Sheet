@@ -6,27 +6,15 @@ on:
     paths:
       - "updates/**"
       - "sync/**"
-      - "windows/mobile_sync_server.py"
-      - "windows/mobile_sync_frontend_adapter.py"
-      - "windows/mobile_companion_controller.py"
-      - "windows/mobile_companion_dialog.py"
-      - "windows/test_mobile_sync_server.py"
-      - "windows/test_mobile_sync_frontend_adapter.py"
-      - "windows/test_mobile_companion_controller.py"
-      - "android/phase8/**"
+      - "windows/**"
+      - "android/**"
       - ".github/workflows/phase8-validation.yml"
   pull_request:
     paths:
       - "updates/**"
       - "sync/**"
-      - "windows/mobile_sync_server.py"
-      - "windows/mobile_sync_frontend_adapter.py"
-      - "windows/mobile_companion_controller.py"
-      - "windows/mobile_companion_dialog.py"
-      - "windows/test_mobile_sync_server.py"
-      - "windows/test_mobile_sync_frontend_adapter.py"
-      - "windows/test_mobile_companion_controller.py"
-      - "android/phase8/**"
+      - "windows/**"
+      - "android/**"
       - ".github/workflows/phase8-validation.yml"
 
 jobs:
@@ -64,3 +52,24 @@ jobs:
           windows.test_mobile_sync_frontend_adapter
           windows.test_mobile_companion_controller
           -v
+
+  android-debug-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Build Android debug APK
+        working-directory: android
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: did-android-phase8-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
