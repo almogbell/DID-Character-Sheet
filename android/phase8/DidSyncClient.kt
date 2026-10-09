@@ -76,7 +76,7 @@ class DidSyncClient(
                     host = host,
                     port = port,
                     pairingToken = token,
-                    serverId = json.optString("server_id").ifBlank { null },
+                    serverId = json.optString("server_id").nonBlankOrNull(),
                     expiresAtEpochSeconds = expires.takeIf { it > 0L },
                 )
             }
@@ -192,7 +192,7 @@ class DidSyncClient(
                     .put("protocol", PROTOCOL)
                     .put("pairing_token", pairing.pairingToken)
                     .put("device_id", deviceId)
-                    .put("device_name", android.os.Build.MODEL ?: "Android phone")
+                    .put("device_name", android.os.Build.MODEL)
                     .put("android_version", androidVersion)
                 webSocket.send(message.toString())
                 return
@@ -210,7 +210,7 @@ class DidSyncClient(
                     .put("protocol", PROTOCOL)
                     .put("android_version", androidVersion)
                     .put("device_id", deviceId)
-                    .put("device_name", android.os.Build.MODEL ?: "Android phone")
+                    .put("device_name", android.os.Build.MODEL)
                     .put("device_token", token)
                     .toString()
             )
@@ -240,8 +240,8 @@ class DidSyncClient(
             "pair_ok" -> {
                 val pairing = pendingPairing ?: return
                 val token = message.getString("device_token")
-                val serverId = message.optString("server_id").ifBlank { pairing.serverId }
-                val desktopVersion = message.optString("desktop_version").ifBlank { null }
+                val serverId = message.optString("server_id").nonBlankOrNull() ?: pairing.serverId
+                val desktopVersion = message.optString("desktop_version").nonBlankOrNull()
                 require(token.length >= 20) { "Computer returned an invalid device credential" }
                 prefs.edit()
                     .putString(KEY_HOST, pairing.host)
@@ -256,8 +256,8 @@ class DidSyncClient(
                 revision = message.optInt("revision", revision)
                 emit(
                     ConnectionState.Connected(
-                        computerName = message.optString("server_id").ifBlank { null },
-                        desktopVersion = message.optString("desktop_version").ifBlank { null },
+                        computerName = message.optString("server_id").nonBlankOrNull(),
+                        desktopVersion = message.optString("desktop_version").nonBlankOrNull(),
                     )
                 )
             }
@@ -272,7 +272,7 @@ class DidSyncClient(
                 main.post { listener.onCommandAccepted(requestId, rev) }
             }
             "command_error" -> {
-                val requestId = message.optString("request_id").ifBlank { null }
+                val requestId = message.optString("request_id").nonBlankOrNull()
                 val code = message.optString("code", "COMMAND_ERROR")
                 val detail = message.optString("message", "The computer rejected the change.")
                 main.post { listener.onCommandRejected(requestId, code, detail) }
@@ -280,7 +280,11 @@ class DidSyncClient(
             "error" -> {
                 val code = message.optString("code", "ERROR")
                 if (code == "PROTOCOL_MISMATCH") {
-                    main.post { listener.onProtocolMismatch(message.optString("desktop_version").ifBlank { null }) }
+                    main.post {
+                        listener.onProtocolMismatch(
+                            message.optString("desktop_version").nonBlankOrNull()
+                        )
+                    }
                 }
                 emit(ConnectionState.Error(code))
             }
@@ -298,6 +302,8 @@ class DidSyncClient(
     private fun emit(state: ConnectionState) {
         main.post { listener.onConnectionState(state) }
     }
+
+    private fun String.nonBlankOrNull(): String? = takeIf { it.isNotBlank() }
 
     companion object {
         const val PROTOCOL = 1
