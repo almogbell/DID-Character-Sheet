@@ -42,7 +42,7 @@ data class DidCharacterSnapshot(
             val imageJson = json.optJSONObject("image") ?: JSONObject()
 
             return DidCharacterSnapshot(
-                id = json.optString("id").ifBlank { null },
+                id = json.optString("id").nonBlankOrNull(),
                 name = json.optString("name", "Unnamed character"),
                 speciesName = json.optString("species_name", ""),
                 backstory = json.optString("backstory", ""),
@@ -64,7 +64,7 @@ data class DidCharacterSnapshot(
                 improvements = improvementsJson.mapObjects(::parseImprovement),
                 inventory = inventoryJson.mapObjects { item ->
                     InventoryItemSnapshot(
-                        id = item.optString("id").ifBlank { null },
+                        id = item.optString("id").nonBlankOrNull(),
                         name = item.optString("name", ""),
                         description = item.optString("description", ""),
                         quantity = item.optInt("quantity", 1),
@@ -73,13 +73,13 @@ data class DidCharacterSnapshot(
                 },
                 notes = notesJson.mapObjects { note ->
                     NoteSnapshot(
-                        id = note.optString("id").ifBlank { null },
+                        id = note.optString("id").nonBlankOrNull(),
                         title = note.optString("title", ""),
                         text = note.optString("text", ""),
-                        color = note.optString("color").ifBlank { null },
+                        color = note.optString("color").nonBlankOrNull(),
                         expanded = note.optBoolean("expanded", true),
                         pinned = note.optBoolean("pinned", false),
-                        linkedImprovementId = note.optString("linked_improvement_id").ifBlank { null },
+                        linkedImprovementId = note.optString("linked_improvement_id").nonBlankOrNull(),
                     )
                 },
                 portrait = PortraitSnapshot(
@@ -94,9 +94,9 @@ data class DidCharacterSnapshot(
         private fun parseImprovement(json: JSONObject): ImprovementSnapshot {
             val empowerments = json.optJSONArray("empowerments")?.mapObjects { empowerment ->
                 EmpowermentSnapshot(
-                    id = empowerment.optString("id").ifBlank { null },
-                    groupId = empowerment.optString("group_id").ifBlank { null },
-                    catalogId = empowerment.optString("catalog_id").ifBlank { null },
+                    id = empowerment.optString("id").nonBlankOrNull(),
+                    groupId = empowerment.optString("group_id").nonBlankOrNull(),
+                    catalogId = empowerment.optString("catalog_id").nonBlankOrNull(),
                     name = empowerment.optString("name", ""),
                     cost = empowerment.optInt("cost", 0),
                     description = empowerment.optString("description", ""),
@@ -106,8 +106,8 @@ data class DidCharacterSnapshot(
             } ?: emptyList()
 
             return ImprovementSnapshot(
-                id = json.optString("id").ifBlank { null },
-                catalogId = json.optString("catalog_id").ifBlank { null },
+                id = json.optString("id").nonBlankOrNull(),
+                catalogId = json.optString("catalog_id").nonBlankOrNull(),
                 name = json.optString("name", ""),
                 cost = json.optInt("cost", 0),
                 description = json.optString("description", ""),
@@ -184,10 +184,11 @@ private fun JSONArray?.toStringList(): List<String> {
         for (i in 0 until length()) {
             when (val item = opt(i)) {
                 is String -> add(item)
-                is JSONObject -> item.optString("display").takeIf { it.isNotBlank() }?.let(::add)
+                is JSONObject -> item.optString("display").nonBlankOrNull()?.let(::add)
             }
         }
     }
 }
 
+private fun String.nonBlankOrNull(): String? = takeIf { it.isNotBlank() }
 private fun JSONObject.copyJson(): JSONObject = JSONObject(toString())
