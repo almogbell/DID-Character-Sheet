@@ -1,9 +1,9 @@
 """High-level installer/controller for Phase 8 mobile companion support.
 
 The controller keeps finished-frontend changes intentionally small. It owns the
-adapter/server/dialog and watches the canonical desktop character state for
-changes, so existing HP/AT/IP/UI code does not need to be individually patched
-just to notify Android.
+adapter/server/dialog, watches canonical desktop character state for changes,
+and injects a Mobile Companion action into the existing DID Tools menu when that
+menu is shown.
 """
 
 from __future__ import annotations
@@ -12,7 +12,8 @@ import hashlib
 import json
 from typing import Any, Optional
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QEvent, QObject, QTimer
+from PySide6.QtWidgets import QApplication, QMenu
 
 try:  # package imports used by tests / repository tooling
     from .mobile_companion_dialog import MobileCompanionDialog
@@ -28,6 +29,7 @@ class MobileCompanionController(QObject):
     """Bind a finished DID main window to the Phase 8 sync transport."""
 
     POLL_INTERVAL_MS = 500
+    TOOLS_ACTION_TEXT = "Mobile Companion"
 
     def __init__(
         self,
@@ -56,6 +58,7 @@ class MobileCompanionController(QObject):
         self._dialog: Optional[MobileCompanionDialog] = None
         self._last_signature: Optional[str] = None
         self._last_character_id: Optional[str] = None
+        self._event_filter_installed = False
 
         # Paired phones must be able to reconnect as soon as the Windows app
         # starts, without requiring the user to open the pairing dialog first.
@@ -66,6 +69,15 @@ class MobileCompanionController(QObject):
         self._poll_timer.setInterval(self.POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self._poll_desktop_state)
         self._poll_timer.start()
+
+        # Avoid forcing the finished frontend's existing toggle_tools_menu()
+        # implementation to be rewritten. Its QMenu is parented to the main
+        # window; when it is shown we recognize it by its normal DID actions and
+        # add Mobile Companion once.
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+            self._event_filter_installed = True
 
     def show_dialog(self) -> None:
         if self._dialog is None:
@@ -84,7 +96,43 @@ class MobileCompanionController(QObject):
 
     def shutdown(self) -> None:
         self._poll_timer.stop()
+        app = QApplication.instance()
+        if self._event_filter_installed and app is not None:
+            app.removeEventFilter(self)
+            self._event_filter_installed = False
         self.server.stop()
+
+    # ------------------------------------------------------------------
+    # Existing Tools menu integration
+    # ------------------------------------------------------------------
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Show and isinstance(watched, QMenu):
+            self._maybe_add_tools_action(watched)
+        return super().eventFilter(watched, event)
+
+    def _maybe_add_tools_action(self, menu: QMenu) -> None:
+        if menu.parent() is not self.window:
+            return
+
+        actions = list(menu.actions())
+        texts = {action.text().replace("&", "").strip() for action in actions}
+        # The finished DID Tools menu has these stable player-facing actions.
+        # Requiring both avoids adding the companion action to unrelated menus.
+        if "Check for Updates" not in texts or "Load Character" not in texts:
+            return
+        if self.TOOLS_ACTION_TEXT in texts:
+            return
+
+        before = next(
+            (
+                action
+                for action in actions
+                if action.text().replace("&", "").strip() == "Check for Updates"
+            ),
+            None,
+        )
+        companion_action = menu.insertAction(before, self.TOOLS_ACTION_TEXT) if before else menu.addAction(self.TOOLS_ACTION_TEXT)
+        companion_action.triggered.connect(self.show_dialog)
 
     # ------------------------------------------------------------------
     # Mobile command path
