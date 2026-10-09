@@ -12,11 +12,19 @@ android {
         applicationId = "com.did.charactersheet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 8
+        versionCode = 9
         versionName = "0.8.0"
     }
 
     buildTypes {
+        debug {
+            // CI debug APKs are signed with runner-local debug certificates. Give
+            // test builds a separate package so they can always be installed
+            // alongside the previous test APK without signature conflicts.
+            applicationIdSuffix = ".phase9test"
+            versionNameSuffix = "-phase9-test"
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
