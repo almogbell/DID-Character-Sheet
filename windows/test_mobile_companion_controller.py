@@ -101,8 +101,6 @@ class FakeServer:
 class ControllerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Controller state/polling only needs QtCore. Avoid constructing QWidget
-        # objects on a headless Windows runner.
         cls.app = QCoreApplication.instance() or QCoreApplication([])
 
     def make_controller(self):
@@ -113,7 +111,7 @@ class ControllerTests(unittest.TestCase):
         controller = MobileCompanionController(
             window=self.window,
             storage_system=FakeStorage,
-            app_version="1.0.10",
+            app_version="1.0.11",
             install_tools_event_filter=False,
         )
         self.addCleanup(controller.shutdown)
@@ -123,6 +121,12 @@ class ControllerTests(unittest.TestCase):
         controller = self.make_controller()
         self.assertEqual(controller.server.started, 1)
         self.assertTrue(controller.server.is_listening())
+
+    def test_shutdown_is_idempotent(self):
+        controller = self.make_controller()
+        controller.shutdown()
+        controller.shutdown()
+        self.assertEqual(controller.server.stopped, 1)
 
     def test_desktop_mutation_is_detected_and_broadcast(self):
         controller = self.make_controller()
@@ -150,20 +154,34 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(controller.server.desktop_changes, 0)
         self.assertEqual(controller.server.character_changes, 0)
 
-    def test_tools_menu_signature_and_insert_position_are_pure(self):
+    def test_finished_1_0_10_tools_menu_is_recognized_without_update_row(self):
         actions = [
             "New Character",
             "Save Character",
             "Load Character",
+            "Delete Character",
+            "Earlier Versions",
             "Edit Abilities",
-            "Check for Updates",
-            "How to Use",
+            "Dice Roller",
         ]
         self.assertTrue(is_did_tools_menu(actions))
-        self.assertEqual(mobile_companion_insert_index(actions), 4)
+        self.assertEqual(mobile_companion_insert_index(actions), 6)
 
-        with_mobile = actions[:4] + ["Mobile Companion"] + actions[4:]
+        with_mobile = actions[:6] + ["Mobile Companion"] + actions[6:]
         self.assertIsNone(mobile_companion_insert_index(with_mobile))
+
+    def test_optional_update_row_does_not_change_menu_detection(self):
+        actions = [
+            "New Character",
+            "Save Character",
+            "Load Character",
+            "Delete Character",
+            "Earlier Versions",
+            "Edit Abilities",
+            "Update Available",
+        ]
+        self.assertTrue(is_did_tools_menu(actions))
+        self.assertEqual(mobile_companion_insert_index(actions), 6)
 
     def test_unrelated_menu_is_rejected(self):
         actions = ["Delete", "Rename"]
@@ -171,10 +189,16 @@ class ControllerTests(unittest.TestCase):
         self.assertIsNone(mobile_companion_insert_index(actions))
 
     def test_qt_mnemonics_do_not_break_tools_menu_detection(self):
-        actions = ["&Load Character", "Check for &Updates"]
-        self.assertEqual(normalize_menu_text("Check for &Updates"), "Check for Updates")
+        actions = [
+            "&New Character",
+            "Save Character",
+            "&Load Character",
+            "Edit &Abilities",
+            "Dice &Roller",
+        ]
+        self.assertEqual(normalize_menu_text("Edit &Abilities"), "Edit Abilities")
         self.assertTrue(is_did_tools_menu(actions))
-        self.assertEqual(mobile_companion_insert_index(actions), 1)
+        self.assertEqual(mobile_companion_insert_index(actions), 4)
 
 
 if __name__ == "__main__":
