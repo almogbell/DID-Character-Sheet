@@ -1,5 +1,11 @@
 import json
+import sys
 import unittest
+from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent.parent
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
 
 from campaign_shared import (
     build_shared_character_state_from_dict,
