@@ -1,0 +1,41 @@
+name: Phase 8 validation
+
+on:
+  push:
+    branches: [main, phase8-sync]
+    paths:
+      - "updates/**"
+      - "sync/**"
+      - "windows/mobile_sync_server.py"
+      - "windows/test_mobile_sync_server.py"
+      - ".github/workflows/phase8-validation.yml"
+  pull_request:
+    paths:
+      - "updates/**"
+      - "sync/**"
+      - "windows/mobile_sync_server.py"
+      - "windows/test_mobile_sync_server.py"
+      - ".github/workflows/phase8-validation.yml"
+
+jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate update manifests
+        run: python sync/validate_manifests.py
+
+  sync-server-tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install sync test dependency
+        run: python -m pip install PySide6
+      - name: Run mobile sync server tests
+        run: python -m unittest windows.test_mobile_sync_server -v
