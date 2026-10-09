@@ -4,13 +4,15 @@ Protocol version: `1`
 
 The Windows desktop application is authoritative. Android sends commands; Windows validates, mutates, saves through the existing desktop path, and broadcasts canonical state.
 
+The first planned released Windows build which speaks this protocol is `1.0.11`. Earlier Windows builds explicitly advertise sync protocol `0` in `updates/windows.json`.
+
 ## Transport
 
 Phase 8 uses a LAN WebSocket connection on TCP port `8765` by default.
 
 The same WebSocket endpoint is used for first-time pairing and normal authenticated synchronization. The Windows companion server starts with the desktop application so already-paired phones can reconnect without opening the pairing dialog first.
 
-The server must not be exposed directly to the public internet. Remote/Tailscale support can be added later.
+The server must not be exposed directly to the public internet. Remote/Tailscale support can be added later as a separate transport decision.
 
 ## Pairing
 
@@ -27,6 +29,8 @@ Pairing must be explicitly started from the Windows app. Windows creates a short
   "server_id": "stable-random-server-id"
 }
 ```
+
+The Android client accepts Phase 8 pairing/reconnect addresses only in private/link-local IPv4 ranges. It also rejects a pairing QR/pasted code whose `expires_at` has already passed.
 
 Android connects to `ws://HOST:PORT` and sends:
 
@@ -50,7 +54,7 @@ Windows exchanges the temporary pairing token for a persistent device token:
   "device_id": "stable-random-device-id",
   "device_token": "persistent-random-device-token",
   "server_id": "stable-random-server-id",
-  "desktop_version": "1.0.10"
+  "desktop_version": "1.0.11"
 }
 ```
 
@@ -58,7 +62,7 @@ The temporary pairing token expires and is invalidated after a successful pairin
 
 ## Authentication / reconnect
 
-Android stores the paired computer identity and its device token in private app storage. On later connections it sends:
+Android stores the paired computer address/identity and its device token in private app storage. On later connections it sends:
 
 ```json
 {
@@ -77,7 +81,7 @@ Windows replies:
 {
   "type": "hello_ok",
   "protocol": 1,
-  "desktop_version": "1.0.10",
+  "desktop_version": "1.0.11",
   "server_id": "stable-random-server-id",
   "revision": 42
 }
@@ -110,7 +114,7 @@ After pairing/authentication Windows sends a full snapshot:
 }
 ```
 
-The exact `character` payload is produced from the current desktop model/serializer. Android must not redefine or round-trip-save the character schema independently.
+The exact `character` payload is produced from the current desktop model/serializer. Android must not redefine or round-trip-save the character schema independently. The typed Android snapshot layer is a read-only view over this canonical data and preserves Improvement/Empowerment `choices` for features which depend on them.
 
 `revision` increases after every accepted mutation. Android replaces its displayed state from server snapshots instead of treating speculative local edits as authoritative.
 
@@ -192,12 +196,20 @@ Android may retain the last received state for display, but disconnected state i
 
 - Pairing is explicitly initiated from Windows.
 - Pairing tokens are random, short-lived and one-time.
+- Android rejects expired pairing codes before attempting a connection.
+- Android Phase 8 accepts only local/private IPv4 pairing/reconnect hosts.
 - Permanent device tokens are random and revocable.
 - Character-changing commands require authentication.
+- Read-only desktop characters reject mobile mutation commands.
 - Device credentials are stored only in private application storage.
 - Permanent credentials are never placed in GitHub manifests or QR codes after pairing.
+- Android update links must be HTTPS GitHub/GitHubusercontent links.
 - The Phase 8 server is LAN-only in intended deployment; do not port-forward it to the public internet.
 
 ## Update compatibility
 
-`updates/windows.json` and `updates/android.json` declare the supported sync protocol. Android also declares the minimum supported Windows application version. The same Android version/protocol/minimum-desktop constants are validated in CI so the code and GitHub manifest cannot drift silently.
+`updates/windows.json` describes the **currently published Windows release**, not the code merely under development. A pre-sync release uses protocol `0`.
+
+`updates/android.json` declares Android's protocol and its minimum compatible Windows version. `sync/windows_protocol_compatibility.json` maps Windows release thresholds to protocol versions. GitHub Actions cross-check the server/client constants, manifests, compatibility table, protocol documentation and test vectors.
+
+A signed Android GitHub release is blocked until the currently advertised Windows release is at least Android's `minimum_desktop_version` and advertises the same protocol.
