@@ -9,10 +9,9 @@ import android.os.Looper
 /**
  * Phase 8 Android update flow.
  *
- * The checker reads updates/android.json from GitHub. For the first release,
- * installation remains under Android's normal security model: the app opens
- * the published APK/release URL and Android handles download/install consent.
- * No silent installation is attempted.
+ * The checker reads updates/android.json from GitHub. Installation remains
+ * under Android's normal security model: the app opens the published APK or
+ * release URL and Android/browser handles download/install consent.
  */
 class AndroidUpdateController(
     private val context: Context,
@@ -43,7 +42,15 @@ class AndroidUpdateController(
     fun openUpdate(info: GitHubUpdateChecker.UpdateInfo): Result<Unit> = runCatching {
         val target = info.downloadUrl ?: info.releaseUrl
             ?: error("This update has not been published for download yet.")
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(target)).apply {
+        val uri = Uri.parse(target)
+        require(uri.scheme.equals("https", ignoreCase = true)) {
+            "The update link is not secure."
+        }
+        val host = uri.host?.lowercase()
+        require(host == "github.com" || host?.endsWith(".githubusercontent.com") == true) {
+            "The update link is not hosted by GitHub."
+        }
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
