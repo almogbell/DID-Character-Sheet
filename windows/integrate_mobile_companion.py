@@ -1,17 +1,17 @@
 """Safely integrate the Phase 8 mobile companion into the finished frontend.
 
-The finished Windows application is much larger than the sync feature, so the
-release workflow should not hand-edit thousands of lines. This patcher performs
-one deliberately tiny, idempotent source change against the confirmed 1.0.10
-BaseMainWindow bootstrap:
+The patcher makes two deliberately small, idempotent changes against the
+finished 1.0.10 frontend:
 
-    self.setup_keyboard_shortcuts()
-    self.refresh_all()
-    self.reset_undo_history(treat_current_as_clean=True)
+1. Install MobileCompanionController after the confirmed BaseMainWindow startup
+   sequence.
+2. Add an explicit Mobile Companion row to the existing Tools menu immediately
+   before Dice Roller.
 
-Immediately after that bootstrap it installs MobileCompanionController. The
-controller itself injects the Tools menu row and shuts down with QApplication,
-so closeEvent and toggle_tools_menu do not need to be rewritten.
+The explicit menu row is intentional. The controller still has its event-filter
+fallback, but the finished frontend should not depend on a QMenu Show event for
+its primary entry point. If startup integration fails, the row remains visible
+and shows the captured startup traceback instead of silently disappearing.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ import re
 from pathlib import Path
 
 INSTALL_MARKER = "# Phase 8: Windows <-> Android mobile companion"
+MENU_MARKER = "# Phase 8: Mobile Companion Tools action"
 
 # Match only the confirmed end-of-BaseMainWindow startup sequence, while
 # tolerating blank lines and both LF/CRLF source files. Keeping this anchor
@@ -36,6 +37,13 @@ BOOTSTRAP_RE = re.compile(
     re.MULTILINE,
 )
 
+# The finished Tools menu creates the Dice Roller submenu immediately after
+# Edit Abilities. Insert our row immediately before that stable anchor.
+MENU_ANCHOR_RE = re.compile(
+    r'(?P<indent>^[ \t]+)dice_menu\s*=\s*menu\.addMenu\("Dice Roller"\)',
+    re.MULTILINE,
+)
+
 VERSION_RE = re.compile(
     r'(?m)^(?P<prefix>\s*APP_VERSION\s*=\s*["\'])'
     r'(?P<version>\d+\.\d+\.\d+)'
@@ -47,6 +55,7 @@ def integration_block(indent: str) -> str:
     inner = indent + "    "
     return (
         f"\n\n{indent}{INSTALL_MARKER}\n"
+        f"{indent}self._mobile_companion_startup_error = None\n"
         f"{indent}try:\n"
         f"{inner}from mobile_companion_controller import install_mobile_companion\n"
         f"{inner}install_mobile_companion(\n"
@@ -56,12 +65,35 @@ def integration_block(indent: str) -> str:
         f"{inner})\n"
         f"{indent}except Exception:\n"
         f"{inner}# Mobile support must never prevent the desktop sheet from opening.\n"
+        f"{inner}self._mobile_companion_startup_error = traceback.format_exc()\n"
         f"{inner}traceback.print_exc()"
     )
 
 
+def menu_block(indent: str) -> str:
+    inner = indent + "    "
+    return (
+        f"{indent}{MENU_MARKER}\n"
+        f"{indent}def open_mobile_companion_from_tools():\n"
+        f"{inner}companion = getattr(self, \"mobile_companion\", None)\n"
+        f"{inner}if companion is not None:\n"
+        f"{inner}    companion.show_dialog()\n"
+        f"{inner}    return\n"
+        f"{inner}detail = getattr(self, \"_mobile_companion_startup_error\", None)\n"
+        f"{inner}message = \"Mobile Companion did not initialize.\"\n"
+        f"{inner}if detail:\n"
+        f"{inner}    message += \"\\n\\n\" + str(detail)\n"
+        f"{inner}QMessageBox.warning(self, \"Mobile Companion\", message)\n"
+        f"\n"
+        f"{indent}add_normal_action(\n"
+        f"{inner}\"Mobile Companion\",\n"
+        f"{inner}open_mobile_companion_from_tools,\n"
+        f"{indent})\n\n"
+    )
+
+
 def patch_frontend_text(text: str, *, target_version: str | None = "1.0.11") -> str:
-    """Return patched frontend text; safe to call repeatedly."""
+    """Return patched frontend text; safe to call repeatedly and on older Phase 8 patches."""
     if target_version is not None:
         match = VERSION_RE.search(text)
         if not match:
@@ -72,17 +104,25 @@ def patch_frontend_text(text: str, *, target_version: str | None = "1.0.11") -> 
             count=1,
         )
 
-    if INSTALL_MARKER in text:
-        return text
+    if INSTALL_MARKER not in text:
+        match = BOOTSTRAP_RE.search(text)
+        if not match:
+            raise ValueError(
+                "Could not find the confirmed BaseMainWindow startup anchor. "
+                "Refusing to guess an insertion point."
+            )
+        text = text[: match.end()] + integration_block(match.group("indent")) + text[match.end() :]
 
-    match = BOOTSTRAP_RE.search(text)
-    if not match:
-        raise ValueError(
-            "Could not find the confirmed BaseMainWindow startup anchor. "
-            "Refusing to guess an insertion point."
-        )
+    if MENU_MARKER not in text:
+        menu_match = MENU_ANCHOR_RE.search(text)
+        if not menu_match:
+            raise ValueError(
+                "Could not find the confirmed Dice Roller Tools-menu anchor. "
+                "Refusing to report a successful integration without a visible Mobile Companion entry."
+            )
+        text = text[: menu_match.start()] + menu_block(menu_match.group("indent")) + text[menu_match.start() :]
 
-    return text[: match.end()] + integration_block(match.group("indent")) + text[match.end() :]
+    return text
 
 
 def patch_frontend_file(
