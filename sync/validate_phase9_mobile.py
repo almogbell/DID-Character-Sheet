@@ -42,6 +42,14 @@ def main() -> None:
         "onRemoveInventoryItem",
     )
     require(
+        "android/phase8/DidCharacterSnapshot.kt",
+        "RICH_NOTE_MARKER",
+        "Html.fromHtml",
+        "AnnotatedString",
+        "UnderlineSpan",
+        "Typeface.BOLD_ITALIC",
+    )
+    require(
         "android/phase8/DidCompanionViewModel.kt",
         '"identity.set"',
         '"inventory.add"',
