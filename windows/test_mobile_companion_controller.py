@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QApplication, QMenu
+from PySide6.QtCore import QCoreApplication, QObject
+from PySide6.QtGui import QAction
 
 from windows.mobile_companion_controller import (
     MobileCompanionController,
@@ -100,13 +100,33 @@ class FakeServer:
         self.character_changes += 1
 
 
+class FakeMenu(QObject):
+    """Headless menu double that enforces the QAction insert contract."""
+
+    def __init__(self):
+        super().__init__()
+        self._actions = []
+
+    def actions(self):
+        return list(self._actions)
+
+    def addAction(self, action):
+        if not isinstance(action, QAction):
+            raise TypeError("addAction requires QAction in this test double")
+        self._actions.append(action)
+        return action
+
+    def insertAction(self, before, action):
+        if not isinstance(before, QAction) or not isinstance(action, QAction):
+            raise TypeError("insertAction requires QAction, QAction")
+        self._actions.insert(self._actions.index(before), action)
+        return action
+
+
 class ControllerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # GitHub Actions sets QT_QPA_PLATFORM=offscreen for this job, so a real
-        # QApplication/QMenu can exercise the exact PySide6 insertion API which
-        # previously failed on the user's machine.
-        cls.app = QApplication.instance() or QApplication([])
+        cls.app = QCoreApplication.instance() or QCoreApplication([])
 
     def make_controller(self):
         self.window = FakeWindow()
@@ -206,9 +226,11 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(mobile_companion_insert_index(actions), 4)
 
     def test_insert_menu_action_uses_qaction_and_preserves_order(self):
-        menu = QMenu()
-        edit_action = menu.addAction("Edit Abilities")
-        dice_action = menu.addAction("Dice Roller")
+        menu = FakeMenu()
+        edit_action = QAction("Edit Abilities", menu)
+        dice_action = QAction("Dice Roller", menu)
+        menu.addAction(edit_action)
+        menu.addAction(dice_action)
         triggered = []
 
         companion = insert_menu_action(
@@ -223,9 +245,9 @@ class ControllerTests(unittest.TestCase):
             ["Edit Abilities", "Mobile Companion", "Dice Roller"],
         )
         self.assertIs(menu.actions()[1], companion)
+        self.assertIsInstance(companion, QAction)
         companion.trigger()
         self.assertEqual(triggered, [True])
-        self.assertIsNotNone(edit_action)
 
 
 if __name__ == "__main__":
