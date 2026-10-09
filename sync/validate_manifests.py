@@ -23,9 +23,11 @@ def require_version(value: object, field: str) -> str:
     return value
 
 
-def require_protocol(value: object, field: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-        raise AssertionError(f"{field} must be a positive integer")
+def require_protocol(value: object, field: str, *, allow_zero: bool = False) -> int:
+    minimum = 0 if allow_zero else 1
+    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise AssertionError(f"{field} must be a {qualifier} integer")
     return value
 
 
@@ -49,6 +51,12 @@ def extract_android_code_constants() -> tuple[str, int, str]:
     return version_match.group(1), int(protocol_match.group(1)), minimum_match.group(1)
 
 
+def version_parts(version: str) -> tuple[int, int, int]:
+    core = version.split("-", 1)[0].split("+", 1)[0]
+    major, minor, patch = core.split(".")
+    return int(major), int(minor), int(patch)
+
+
 def validate() -> None:
     windows = load("windows.json")
     android = load("android.json")
@@ -63,13 +71,14 @@ def validate() -> None:
         "android.minimum_desktop_version",
     )
 
-    windows_protocol = require_protocol(windows.get("sync_protocol"), "windows.sync_protocol")
+    # Protocol 0 explicitly means a released Windows build predates the mobile
+    # companion. Android protocol numbers begin at 1.
+    windows_protocol = require_protocol(
+        windows.get("sync_protocol"),
+        "windows.sync_protocol",
+        allow_zero=True,
+    )
     android_protocol = require_protocol(android.get("sync_protocol"), "android.sync_protocol")
-    if windows_protocol != android_protocol:
-        raise AssertionError(
-            "Windows and Android manifests must declare the same sync_protocol "
-            f"(windows={windows_protocol}, android={android_protocol})"
-        )
 
     expected_windows_tag = f"v{windows_version}"
     if windows.get("tag") != expected_windows_tag:
@@ -103,19 +112,25 @@ def validate() -> None:
         if not isinstance(android_release, str) or expected_android_tag not in android_release:
             raise AssertionError("android.release_url must point at the declared Android release")
 
-    def parts(version: str) -> tuple[int, int, int]:
-        core = version.split("-", 1)[0].split("+", 1)[0]
-        major, minor, patch = core.split(".")
-        return int(major), int(minor), int(patch)
+    windows_is_compatible_release = version_parts(windows_version) >= version_parts(minimum_desktop)
+    if windows_is_compatible_release and windows_protocol != android_protocol:
+        raise AssertionError(
+            "The advertised compatible Windows release must use the Android sync protocol "
+            f"(windows={windows_protocol}, android={android_protocol})"
+        )
 
     # During development an unpublished Android build may target the next
-    # sync-enabled Windows release. Once Android has real release/download URLs,
-    # that required Windows version must already be the advertised Windows release
-    # (or older), otherwise users could download an unusable Android build.
-    if android_download is not None and parts(minimum_desktop) > parts(windows_version):
-        raise AssertionError(
-            "Published Android release requires a Windows version newer than updates/windows.json"
-        )
+    # sync-enabled Windows release. Once Android is actually published, that
+    # Windows release must already be advertised and speak the same protocol.
+    if android_download is not None:
+        if not windows_is_compatible_release:
+            raise AssertionError(
+                "Published Android release requires a Windows version newer than updates/windows.json"
+            )
+        if windows_protocol != android_protocol:
+            raise AssertionError(
+                "Published Android release and advertised Windows release use different sync protocols"
+            )
 
     code_version, code_protocol, code_minimum_desktop = extract_android_code_constants()
     if code_version != android_version:
@@ -136,7 +151,8 @@ def validate() -> None:
 
     print(
         "Update manifests valid: "
-        f"Windows {windows_version}, Android {android_version}, protocol {windows_protocol}, "
+        f"Windows {windows_version} (protocol {windows_protocol}), "
+        f"Android {android_version} (protocol {android_protocol}), "
         f"minimum desktop {minimum_desktop}"
     )
 
