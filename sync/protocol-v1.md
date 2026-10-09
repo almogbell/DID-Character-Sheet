@@ -14,6 +14,8 @@ The same WebSocket endpoint is used for first-time pairing and normal authentica
 
 The server must not be exposed directly to the public internet. Remote/Tailscale support can be added later as a separate transport decision.
 
+Client-to-server text messages are limited to 64 KiB. Oversized input is rejected with `MESSAGE_TOO_LARGE` and the connection is closed. This limit applies to commands/pairing traffic, not to canonical state sent from Windows to Android; state may legitimately contain larger portrait/note data.
+
 ## Pairing
 
 Pairing must be explicitly started from the Windows app. Windows creates a short-lived one-time token and displays a QR code containing:
@@ -59,6 +61,8 @@ Windows exchanges the temporary pairing token for a persistent device token:
 ```
 
 The temporary pairing token expires and is invalidated after a successful pairing. It is never used as the permanent credential.
+
+Malformed/non-numeric protocol values are treated as protocol mismatches rather than being allowed to raise through the WebSocket handler. Device identity/version fields are length-bounded before persistence.
 
 ## Authentication / reconnect
 
@@ -117,6 +121,8 @@ After pairing/authentication Windows sends a full snapshot:
 The exact `character` payload is produced from the current desktop model/serializer. Android must not redefine or round-trip-save the character schema independently. The typed Android snapshot layer is a read-only view over this canonical data and preserves Improvement/Empowerment `choices` for features which depend on them.
 
 `revision` increases after every accepted mutation. Android replaces its displayed state from server snapshots instead of treating speculative local edits as authoritative.
+
+If the desktop serializer temporarily cannot produce a canonical JSON-safe snapshot, the server returns `STATE_UNAVAILABLE` instead of letting the WebSocket callback crash. The client remains non-authoritative and must wait for/request a later canonical state.
 
 ## Commands
 
@@ -203,6 +209,7 @@ Android may retain the last received state for display, but disconnected state i
 - Read-only desktop characters reject mobile mutation commands.
 - Device credentials are stored only in private application storage.
 - Permanent credentials are never placed in GitHub manifests or QR codes after pairing.
+- Client-to-server messages are size-limited and malformed protocol values are handled without escaping the network callback.
 - Android update links must be HTTPS GitHub/GitHubusercontent links.
 - The Phase 8 server is LAN-only in intended deployment; do not port-forward it to the public internet.
 
@@ -210,6 +217,6 @@ Android may retain the last received state for display, but disconnected state i
 
 `updates/windows.json` describes the **currently published Windows release**, not the code merely under development. A pre-sync release uses protocol `0`.
 
-`updates/android.json` declares Android's protocol and its minimum compatible Windows version. `sync/windows_protocol_compatibility.json` maps Windows release thresholds to protocol versions. GitHub Actions cross-check the server/client constants, manifests, compatibility table, protocol documentation and test vectors.
+`updates/android.json` declares Android's protocol and its minimum compatible Windows version. `sync/windows_protocol_compatibility.json` maps Windows release thresholds to protocol versions. GitHub Actions cross-check the server/client constants, manifests, Android Gradle version, compatibility table, protocol documentation and test vectors.
 
 A signed Android GitHub release is blocked until the currently advertised Windows release is at least Android's `minimum_desktop_version` and advertises the same protocol.
