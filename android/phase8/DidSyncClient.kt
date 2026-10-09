@@ -76,7 +76,7 @@ class DidSyncClient(
                     host = host,
                     port = port,
                     pairingToken = token,
-                    serverId = json.optString("server_id").nonBlankOrNull(),
+                    serverId = json.optString("server_id").takeIf { it.isNotBlank() },
                     expiresAtEpochSeconds = expires.takeIf { it > 0L },
                 )
             }
@@ -286,11 +286,14 @@ class DidSyncClient(
                         )
                     }
                 }
-                emit(ConnectionState.Error(code))
+                val detail = message.optString("message").nonBlankOrNull() ?: code
+                emit(ConnectionState.Error(detail))
             }
-            "pair_error", "hello_error" -> emit(
-                ConnectionState.Error(message.optString("code", "Connection rejected"))
-            )
+            "pair_error", "hello_error" -> {
+                val code = message.optString("code", "Connection rejected")
+                val detail = message.optString("message").nonBlankOrNull() ?: code
+                emit(ConnectionState.Error(detail))
+            }
         }
     }
 
