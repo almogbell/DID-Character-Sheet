@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID = ROOT / "android" / "phase8"
+APP = ROOT / "android" / "app"
 
 
 def read(name: str) -> str:
@@ -38,6 +39,17 @@ def validate() -> None:
     if missing:
         raise AssertionError(f"Missing Phase 8 Android source files: {missing}")
 
+    required_project_files = (
+        ROOT / "android" / "settings.gradle.kts",
+        ROOT / "android" / "build.gradle.kts",
+        APP / "build.gradle.kts",
+        APP / "src" / "main" / "AndroidManifest.xml",
+        APP / "src" / "main" / "java" / "com" / "did" / "charactersheet" / "MainActivity.kt",
+    )
+    missing_project = [str(path.relative_to(ROOT)) for path in required_project_files if not path.exists()]
+    if missing_project:
+        raise AssertionError(f"Missing buildable Android project files: {missing_project}")
+
     client = read("DidSyncClient.kt")
     require(client, 'action = "resource.change"', "DidSyncClient")
     require(client, "isAllowedLanIpv4", "DidSyncClient")
@@ -62,13 +74,20 @@ def validate() -> None:
     ):
         require(snapshot, key, "DidCharacterSnapshot")
 
+    # Compose's public weight modifier is a RowScope/ColumnScope extension.
+    # Explicitly importing androidx.compose.foundation.layout.weight resolved to
+    # an internal implementation property with this dependency set, so ensure
+    # our source uses scoped Modifier.weight(...) without that import.
+    for name in ("DidCompanionSheet.kt", "Phase8CompanionRoot.kt"):
+        text = read(name)
+        require(text, "Modifier.weight(", name)
+        forbid(text, "import androidx.compose.foundation.layout.weight", name)
+
     sheet = read("DidCompanionSheet.kt")
-    require(sheet, "import androidx.compose.foundation.layout.weight", "DidCompanionSheet")
     for label in ("Character", "Equipment", "Notes", "Abilities", "Improvements"):
         require(sheet, f'"{label}"', "DidCompanionSheet")
 
     root = read("Phase8CompanionRoot.kt")
-    require(root, "import androidx.compose.foundation.layout.weight", "Phase8CompanionRoot")
     require(root, "onManualPairingCode", "Phase8CompanionRoot")
 
     scanner = read("PairingScanner.kt")
@@ -86,6 +105,21 @@ def validate() -> None:
     bridge = read("Phase8ActivityBridge.kt")
     require(bridge, "PairingScanner", "Phase8ActivityBridge")
     require(bridge, "AndroidUpdateController", "Phase8ActivityBridge")
+
+    main_activity = required_project_files[-1].read_text(encoding="utf-8")
+    require(main_activity, "Phase8CompanionRoot", "MainActivity")
+    require(main_activity, "Phase8ActivityBridge", "MainActivity")
+    require(main_activity, "UpdateNotice", "MainActivity")
+    forbid(main_activity, "import androidx.compose.foundation.layout.weight", "MainActivity")
+
+    app_gradle = (APP / "build.gradle.kts").read_text(encoding="utf-8")
+    require(app_gradle, 'java.srcDir("../phase8")', "android/app/build.gradle.kts")
+    require(app_gradle, 'implementation("com.squareup.okhttp3:okhttp:4.12.0")', "android/app/build.gradle.kts")
+    require(app_gradle, 'implementation("com.google.android.gms:play-services-code-scanner:16.1.0")', "android/app/build.gradle.kts")
+
+    manifest = (APP / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
+    require(manifest, 'android.permission.INTERNET', "AndroidManifest.xml")
+    require(manifest, 'android:usesCleartextTraffic="true"', "AndroidManifest.xml")
 
     # The companion source may mention .didchar in documentation comments, but
     # none of the transport/UI files should contain file I/O APIs for character
