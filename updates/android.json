@@ -1,0 +1,9 @@
+{
+  "platform": "android",
+  "version": "0.8.0",
+  "tag": "android-v0.8.0",
+  "minimum_desktop_version": "1.0.10",
+  "sync_protocol": 1,
+  "download_url": null,
+  "release_url": null
+}
