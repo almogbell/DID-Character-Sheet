@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from PySide6.QtCore import QEvent, QObject, QTimer
 from PySide6.QtWidgets import QApplication, QMenu
@@ -23,6 +23,28 @@ except ImportError:  # sibling imports used by the packaged desktop app
     from mobile_companion_dialog import MobileCompanionDialog
     from mobile_sync_frontend_adapter import DesktopSyncAdapter, FrontendHooks
     from mobile_sync_server import MobileSyncServer
+
+
+def normalize_menu_text(text: str) -> str:
+    """Normalize Qt mnemonic markers without depending on a QWidget instance."""
+    return str(text).replace("&", "").strip()
+
+
+def is_did_tools_menu(action_texts: Iterable[str]) -> bool:
+    """Return True only for the DID Tools menu signature used by the frontend."""
+    texts = {normalize_menu_text(text) for text in action_texts}
+    return "Check for Updates" in texts and "Load Character" in texts
+
+
+def mobile_companion_insert_index(action_texts: Iterable[str]) -> Optional[int]:
+    """Return where Mobile Companion belongs, or None when it should not be added."""
+    texts = [normalize_menu_text(text) for text in action_texts]
+    if not is_did_tools_menu(texts) or MobileCompanionController.TOOLS_ACTION_TEXT in texts:
+        return None
+    try:
+        return texts.index("Check for Updates")
+    except ValueError:
+        return len(texts)
 
 
 class MobileCompanionController(QObject):
@@ -75,8 +97,7 @@ class MobileCompanionController(QObject):
         # implementation to be rewritten. Its QMenu is parented to the main
         # window; when it is shown we recognize it by its normal DID actions and
         # add Mobile Companion once. Headless unit tests can explicitly disable
-        # this global QApplication event filter while still testing the menu
-        # injection helper directly; production keeps it enabled by default.
+        # this global QApplication event filter while production keeps it on.
         if install_tools_event_filter:
             app = QApplication.instance()
             if app is not None:
@@ -119,25 +140,14 @@ class MobileCompanionController(QObject):
             return
 
         actions = list(menu.actions())
-        texts = {action.text().replace("&", "").strip() for action in actions}
-        # The finished DID Tools menu has these stable player-facing actions.
-        # Requiring both avoids adding the companion action to unrelated menus.
-        if "Check for Updates" not in texts or "Load Character" not in texts:
-            return
-        if self.TOOLS_ACTION_TEXT in texts:
+        insertion_index = mobile_companion_insert_index(action.text() for action in actions)
+        if insertion_index is None:
             return
 
-        before = next(
-            (
-                action
-                for action in actions
-                if action.text().replace("&", "").strip() == "Check for Updates"
-            ),
-            None,
-        )
+        before = actions[insertion_index] if insertion_index < len(actions) else None
         companion_action = (
             menu.insertAction(before, self.TOOLS_ACTION_TEXT)
-            if before
+            if before is not None
             else menu.addAction(self.TOOLS_ACTION_TEXT)
         )
         companion_action.triggered.connect(self.show_dialog)
