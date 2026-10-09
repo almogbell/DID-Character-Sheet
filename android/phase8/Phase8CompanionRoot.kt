@@ -20,15 +20,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.did.charactersheet.ui.DidPalette
 
-/**
- * Single companion entry surface. Pairing/update launching stays in the host
- * Activity while this root decides between connection setup and the live sheet.
- */
+/** Companion entry surface. Windows remains the authoritative character. */
 @Composable
 fun Phase8CompanionRoot(
     state: DidCompanionViewModel.UiState,
@@ -40,6 +36,11 @@ fun Phase8CompanionRoot(
     onHpChange: (Int) -> Unit,
     onAtChange: (Int) -> Unit,
     onIpChange: (Int) -> Unit,
+    onSetName: (String) -> Unit,
+    onSetBackstory: (String) -> Unit,
+    onAddInventoryItem: (String, String, Int) -> Unit,
+    onUpdateInventoryItem: (String, String, String, Int) -> Unit,
+    onRemoveInventoryItem: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snapshot = state.snapshot
@@ -74,6 +75,11 @@ fun Phase8CompanionRoot(
             onHpChange = onHpChange,
             onAtChange = onAtChange,
             onIpChange = onIpChange,
+            onSetName = onSetName,
+            onSetBackstory = onSetBackstory,
+            onAddInventoryItem = onAddInventoryItem,
+            onUpdateInventoryItem = onUpdateInventoryItem,
+            onRemoveInventoryItem = onRemoveInventoryItem,
             modifier = Modifier.weight(1f),
         )
     }
