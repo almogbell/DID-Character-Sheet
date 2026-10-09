@@ -33,6 +33,14 @@ jobs:
         run: python sync/validate_protocol_contract.py
       - name: Validate Phase 8 Android source invariants
         run: python sync/validate_android_phase8_sources.py
+      - name: Build Windows Phase 8 integration bundle
+        run: python sync/build_windows_phase8_bundle.py
+      - name: Upload Windows Phase 8 integration bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: did-phase8-windows-integration
+          path: dist/DID_Phase8_Windows_Integration.zip
+          if-no-files-found: error
 
   sync-server-tests:
     runs-on: windows-latest
