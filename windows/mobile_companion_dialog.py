@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from PySide6.QtCore import Qt, QByteArray, QBuffer, QIODevice
+from PySide6.QtCore import Qt, QByteArray
 from PySide6.QtGui import QGuiApplication, QPixmap
 from PySide6.QtWidgets import (
     QDialog,
@@ -28,7 +28,10 @@ try:
 except Exception:  # Optional until packaging is updated.
     qrcode = None
 
-from mobile_sync_server import MobileSyncServer
+try:  # package import used by tests / repository tooling
+    from .mobile_sync_server import MobileSyncServer
+except ImportError:  # sibling import used by the packaged desktop app
+    from mobile_sync_server import MobileSyncServer
 
 
 class MobileCompanionDialog(QDialog):
@@ -126,11 +129,16 @@ class MobileCompanionDialog(QDialog):
 
         pixmap = self._qr_pixmap(text)
         if pixmap is None:
-            self.qr_label.setText("QR support will be enabled in the packaged build.\nUse Copy pairing code for now.")
+            self.qr_label.setText("QR support is unavailable in this build.\nUse Copy pairing code instead.")
         else:
             self.qr_label.setText("")
             self.qr_label.setPixmap(
-                pixmap.scaled(240, 240, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                pixmap.scaled(
+                    240,
+                    240,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
             )
 
     def _copy_pairing(self) -> None:
@@ -173,12 +181,7 @@ class MobileCompanionDialog(QDialog):
         if qrcode is None:
             return None
         image = qrcode.make(text)
-        buffer = QBuffer()
-        if not buffer.open(QIODevice.OpenModeFlag.ReadWrite):
-            return None
         try:
-            # Pillow-backed qrcode image can save directly to QBuffer-like objects
-            # only inconsistently, so save to bytes first.
             import io
 
             raw = io.BytesIO()
@@ -187,5 +190,5 @@ class MobileCompanionDialog(QDialog):
             if not pixmap.loadFromData(QByteArray(raw.getvalue()), "PNG"):
                 return None
             return pixmap
-        finally:
-            buffer.close()
+        except Exception:
+            return None
