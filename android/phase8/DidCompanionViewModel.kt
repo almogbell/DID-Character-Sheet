@@ -3,10 +3,13 @@ package com.did.charactersheet.sync
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
@@ -24,6 +27,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         val lastError: String? = null,
         val pendingRequestIds: Set<String> = emptySet(),
         val protocolMismatchDesktopVersion: String? = null,
+        val reconnectingAutomatically: Boolean = false,
     ) {
         val isConnected: Boolean
             get() = connection is DidSyncClient.ConnectionState.Connected
@@ -41,19 +45,29 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
         listener = this,
     )
 
+    private var retryJob: Job? = null
+    private var retryAttempt = 0
+    private var allowAutoReconnect = true
+
     init {
         // Normal startup path: reconnect to the previously paired desktop.
+        // If no computer has ever been paired, connectSaved simply returns false.
         syncClient.connectSaved()
     }
 
     fun pairFromQrJson(qrJson: String): Result<Unit> = runCatching {
         val payload = DidSyncClient.PairingPayload.fromQrJson(qrJson)
-        _uiState.update { it.copy(lastError = null) }
+        allowAutoReconnect = true
+        cancelRetry()
+        _uiState.update { it.copy(lastError = null, protocolMismatchDesktopVersion = null) }
         syncClient.pair(payload)
     }
 
     fun reconnect() {
-        _uiState.update { it.copy(lastError = null) }
+        allowAutoReconnect = true
+        retryAttempt = 0
+        cancelRetry()
+        _uiState.update { it.copy(lastError = null, protocolMismatchDesktopVersion = null) }
         if (!syncClient.connectSaved()) {
             _uiState.update {
                 it.copy(lastError = "No paired computer is saved. Pair this phone from the Windows DID app first.")
@@ -62,6 +76,8 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun forgetComputer() {
+        allowAutoReconnect = false
+        cancelRetry()
         syncClient.forgetComputer()
         _uiState.value = UiState()
     }
@@ -90,10 +106,20 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
             current.copy(
                 connection = state,
                 lastError = if (state is DidSyncClient.ConnectionState.Error) state.message else current.lastError,
+                reconnectingAutomatically = false,
             )
         }
-        if (state is DidSyncClient.ConnectionState.Connected) {
-            syncClient.requestFreshState()
+
+        when (state) {
+            is DidSyncClient.ConnectionState.Connected -> {
+                retryAttempt = 0
+                cancelRetry()
+                syncClient.requestFreshState()
+            }
+            is DidSyncClient.ConnectionState.Error,
+            DidSyncClient.ConnectionState.Disconnected -> scheduleReconnect()
+            DidSyncClient.ConnectionState.Connecting,
+            DidSyncClient.ConnectionState.Pairing -> Unit
         }
     }
 
@@ -103,6 +129,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
                 revision = revision,
                 character = character,
                 lastError = null,
+                reconnectingAutomatically = false,
                 // A canonical state supersedes all optimistic/pending assumptions.
                 pendingRequestIds = emptySet(),
             )
@@ -130,15 +157,45 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     }
 
     override fun onProtocolMismatch(desktopVersion: String?) {
+        // A protocol mismatch will not heal through network retries. Stop trying
+        // until the user updates one of the applications or explicitly reconnects.
+        allowAutoReconnect = false
+        cancelRetry()
         _uiState.update {
             it.copy(
                 protocolMismatchDesktopVersion = desktopVersion,
+                reconnectingAutomatically = false,
                 lastError = "This phone and the Windows DID app use incompatible sync versions. Update the older app.",
             )
         }
     }
 
+    private fun scheduleReconnect() {
+        if (!allowAutoReconnect || retryJob?.isActive == true) return
+        val seconds = RETRY_SECONDS[minOf(retryAttempt, RETRY_SECONDS.lastIndex)]
+        retryAttempt += 1
+        _uiState.update { it.copy(reconnectingAutomatically = true) }
+        retryJob = viewModelScope.launch {
+            delay(seconds * 1000L)
+            _uiState.update { it.copy(reconnectingAutomatically = false) }
+            if (!allowAutoReconnect) return@launch
+            val hasSavedComputer = syncClient.connectSaved()
+            if (!hasSavedComputer) {
+                // No pairing exists, so repeated retries would serve no purpose.
+                allowAutoReconnect = false
+            }
+        }
+    }
+
+    private fun cancelRetry() {
+        retryJob?.cancel()
+        retryJob = null
+        _uiState.update { it.copy(reconnectingAutomatically = false) }
+    }
+
     override fun onCleared() {
+        allowAutoReconnect = false
+        cancelRetry()
         syncClient.disconnect()
         super.onCleared()
     }
@@ -146,5 +203,6 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     companion object {
         // Keep this independent from the Windows application version.
         const val ANDROID_VERSION = "0.8.0"
+        private val RETRY_SECONDS = intArrayOf(2, 4, 8, 16, 30)
     }
 }
