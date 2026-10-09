@@ -9,8 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.rememberScrollState
+import androidx.compose.foundation.layout.verticalScroll
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -108,7 +109,7 @@ fun CompanionSheetScreen(
             when (tab) {
                 0 -> CharacterPage(
                     character = character,
-                    editable = state.canEdit,
+                    editable = !state.isReadOnly,
                     pending = state.pendingRequestIds.isNotEmpty(),
                     onHpChange = onHpChange,
                     onAtChange = onAtChange,
@@ -390,7 +391,7 @@ private fun String?.toComposeColor(): Color? {
     val raw = this?.trim()?.removePrefix("#") ?: return null
     val value = raw.toLongOrNull(16) ?: return null
     return when (raw.length) {
-        6 -> Color(0xFF000000 or value)
+        6 -> Color(0xFF000000L or value)
         8 -> Color(value)
         else -> null
     }
