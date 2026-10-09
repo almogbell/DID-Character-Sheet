@@ -1,0 +1,35 @@
+{
+  "protocol": 1,
+  "messages": {
+    "hello": {
+      "type": "hello",
+      "protocol": 1,
+      "android_version": "0.8.0",
+      "device_id": "test-device-id",
+      "device_name": "Test Phone"
+    },
+    "hello_ok": {
+      "type": "hello_ok",
+      "protocol": 1,
+      "desktop_version": "1.0.10",
+      "server_id": "test-server-id"
+    },
+    "resource_change": {
+      "type": "command",
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "base_revision": 7,
+      "action": "resource.change",
+      "payload": {
+        "resource": "Adversity",
+        "delta": 1
+      }
+    },
+    "command_error": {
+      "type": "command_error",
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "code": "VALIDATION_ERROR",
+      "message": "Example validation error",
+      "revision": 7
+    }
+  }
+}
