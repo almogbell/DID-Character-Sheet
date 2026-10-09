@@ -31,9 +31,13 @@ def normalize_menu_text(text: str) -> str:
 
 
 def is_did_tools_menu(action_texts: Iterable[str]) -> bool:
-    """Return True only for the DID Tools menu signature used by the frontend."""
+    """Return True only for the DID Tools menu signature used by 1.0.10+."""
     texts = {normalize_menu_text(text) for text in action_texts}
-    return "Check for Updates" in texts and "Load Character" in texts
+    # The finished 1.0.10 frontend no longer has a permanent "Check for
+    # Updates" row. It appears only when an update is actually available, so it
+    # cannot be used as the menu signature. These three actions are stable.
+    required = {"New Character", "Load Character", "Edit Abilities"}
+    return required.issubset(texts)
 
 
 def mobile_companion_insert_index(action_texts: Iterable[str]) -> Optional[int]:
@@ -41,10 +45,16 @@ def mobile_companion_insert_index(action_texts: Iterable[str]) -> Optional[int]:
     texts = [normalize_menu_text(text) for text in action_texts]
     if not is_did_tools_menu(texts) or MobileCompanionController.TOOLS_ACTION_TEXT in texts:
         return None
-    try:
-        return texts.index("Check for Updates")
-    except ValueError:
-        return len(texts)
+
+    # Keep Mobile Companion with the character-management/editing commands and
+    # before the Dice Roller submenu. Fall back to the optional update row, then
+    # to the end of the menu for future frontend variations.
+    for anchor in ("Dice Roller", "Update Available", "Check for Updates"):
+        try:
+            return texts.index(anchor)
+        except ValueError:
+            pass
+    return len(texts)
 
 
 class MobileCompanionController(QObject):
@@ -82,6 +92,7 @@ class MobileCompanionController(QObject):
         self._last_signature: Optional[str] = None
         self._last_character_id: Optional[str] = None
         self._event_filter_installed = False
+        self._shutdown = False
 
         # Paired phones must be able to reconnect as soon as the Windows app
         # starts, without requiring the user to open the pairing dialog first.
@@ -98,15 +109,20 @@ class MobileCompanionController(QObject):
         # window; when it is shown we recognize it by its normal DID actions and
         # add Mobile Companion once. Headless unit tests can explicitly disable
         # this global QApplication event filter while production keeps it on.
-        if install_tools_event_filter:
-            app = QApplication.instance()
-            if app is not None:
-                app.installEventFilter(self)
-                self._event_filter_installed = True
+        app = QApplication.instance()
+        if install_tools_event_filter and app is not None:
+            app.installEventFilter(self)
+            self._event_filter_installed = True
+
+        # The finished frontend can keep its existing closeEvent unchanged.
+        # Clean shutdown is tied to the QApplication lifetime instead.
+        if app is not None:
+            app.aboutToQuit.connect(self.shutdown)
 
     def show_dialog(self) -> None:
         if self._dialog is None:
             self._dialog = MobileCompanionDialog(self.server, self.window)
+            self._dialog.finished.connect(self._dialog_finished)
         self._dialog.show()
         self._dialog.raise_()
         self._dialog.activateWindow()
@@ -120,6 +136,9 @@ class MobileCompanionController(QObject):
         self._capture_and_broadcast(force_character_event=True)
 
     def shutdown(self) -> None:
+        if self._shutdown:
+            return
+        self._shutdown = True
         self._poll_timer.stop()
         app = QApplication.instance()
         if self._event_filter_installed and app is not None:
@@ -220,6 +239,11 @@ class MobileCompanionController(QObject):
         value = state.get("id")
         return str(value) if value is not None else None
 
+    def _dialog_finished(self, *_args) -> None:
+        # Recreate next time so paired-device status is always fresh, while the
+        # server itself stays alive for the whole desktop session.
+        self._dialog = None
+
 
 def install_mobile_companion(
     window: Any,
@@ -229,6 +253,10 @@ def install_mobile_companion(
     hooks: Optional[FrontendHooks] = None,
 ) -> MobileCompanionController:
     """Convenience entry point used by the finished frontend."""
+    existing = getattr(window, "mobile_companion", None)
+    if isinstance(existing, MobileCompanionController):
+        return existing
+
     controller = MobileCompanionController(
         window=window,
         storage_system=storage_system,
