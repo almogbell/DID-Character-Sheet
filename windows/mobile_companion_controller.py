@@ -38,6 +38,7 @@ class MobileCompanionController(QObject):
         storage_system: Any,
         app_version: str,
         hooks: Optional[FrontendHooks] = None,
+        install_tools_event_filter: bool = True,
     ) -> None:
         super().__init__(window)
         self.window = window
@@ -73,11 +74,14 @@ class MobileCompanionController(QObject):
         # Avoid forcing the finished frontend's existing toggle_tools_menu()
         # implementation to be rewritten. Its QMenu is parented to the main
         # window; when it is shown we recognize it by its normal DID actions and
-        # add Mobile Companion once.
-        app = QApplication.instance()
-        if app is not None:
-            app.installEventFilter(self)
-            self._event_filter_installed = True
+        # add Mobile Companion once. Headless unit tests can explicitly disable
+        # this global QApplication event filter while still testing the menu
+        # injection helper directly; production keeps it enabled by default.
+        if install_tools_event_filter:
+            app = QApplication.instance()
+            if app is not None:
+                app.installEventFilter(self)
+                self._event_filter_installed = True
 
     def show_dialog(self) -> None:
         if self._dialog is None:
@@ -131,7 +135,11 @@ class MobileCompanionController(QObject):
             ),
             None,
         )
-        companion_action = menu.insertAction(before, self.TOOLS_ACTION_TEXT) if before else menu.addAction(self.TOOLS_ACTION_TEXT)
+        companion_action = (
+            menu.insertAction(before, self.TOOLS_ACTION_TEXT)
+            if before
+            else menu.addAction(self.TOOLS_ACTION_TEXT)
+        )
         companion_action.triggered.connect(self.show_dialog)
 
     # ------------------------------------------------------------------
