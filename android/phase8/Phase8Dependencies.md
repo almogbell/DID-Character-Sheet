@@ -2,13 +2,11 @@
 
 ## Runtime dependencies
 
-Add these to the Android app module when Phase 8 is merged into the full Android Studio project:
+The buildable `android/app` module already includes the Phase 8 runtime dependencies:
 
 ```kotlin
-dependencies {
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
-}
+implementation("com.squareup.okhttp3:okhttp:4.12.0")
+implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 ```
 
 - OkHttp provides the authenticated companion WebSocket.
@@ -17,66 +15,41 @@ dependencies {
 
 ## Manifest networking
 
-The application manifest needs:
+The application has the `INTERNET` permission and enables cleartext transport because Phase 8 connects to a dynamic private IPv4 address such as `192.168.1.20` using `ws://`.
 
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-```
-
-Phase 8 connects to a dynamic private IPv4 address such as `192.168.1.20`, so Android Network Security Configuration cannot practically enumerate the computer address in advance. The final app therefore needs cleartext LAN WebSocket support, normally:
-
-```xml
-<application
-    android:usesCleartextTraffic="true"
-    ... />
-```
-
-The transport code compensates by refusing pairing/reconnect hosts outside private/link-local IPv4 ranges. Internet update traffic remains HTTPS-only and `AndroidUpdateController` refuses update links which are not HTTPS GitHub links.
+Android Network Security Configuration cannot practically enumerate the user's LAN computer address in advance. The transport code therefore applies the restriction in code: pairing and saved reconnect hosts must be private/link-local IPv4 addresses. Internet update traffic remains HTTPS-only and `AndroidUpdateController` refuses update links which are not HTTPS GitHub/GitHubusercontent links.
 
 Do not add a public hostname or port-forward TCP 8765 for Phase 8.
 
+## Debug validation
+
+`.github/workflows/phase8-validation.yml` uses JDK 17 and Gradle 8.11.1 to build `:app:assembleDebug` on every Android/Phase 8 change and publishes the APK as a workflow artifact. This catches real Kotlin/Compose/Gradle integration failures in addition to the static protocol checks.
+
 ## Release signing for GitHub Actions
 
-`.github/workflows/android-release.yml` expects the Android Gradle project under `android/` and these repository secrets:
+`.github/workflows/android-release.yml` expects these repository secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
 
-The app module's `build.gradle.kts` should consume the environment variables supplied by the workflow:
+The workflow restores the keystore only inside the temporary GitHub Actions runner and supplies these environment variables to `android/app/build.gradle.kts`:
 
-```kotlin
-android {
-    signingConfigs {
-        create("release") {
-            val storePath = System.getenv("DID_RELEASE_STORE_FILE")
-            if (!storePath.isNullOrBlank()) {
-                storeFile = file(storePath)
-                storePassword = System.getenv("DID_RELEASE_STORE_PASSWORD")
-                keyAlias = System.getenv("DID_RELEASE_KEY_ALIAS")
-                keyPassword = System.getenv("DID_RELEASE_KEY_PASSWORD")
-            }
-        }
-    }
+- `DID_RELEASE_STORE_FILE`
+- `DID_RELEASE_STORE_PASSWORD`
+- `DID_RELEASE_KEY_ALIAS`
+- `DID_RELEASE_KEY_PASSWORD`
 
-    buildTypes {
-        getByName("release") {
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-The keystore itself must never be committed to GitHub.
+The keystore itself must never be committed to GitHub. The same signing key must be retained for every future APK update; Android will reject an update signed by a different key.
 
 ## Release flow
 
-When the full project is integrated and signing secrets exist, publishing Android is intentionally small:
+Once the matching sync-enabled Windows build is published and the signing secrets exist:
 
-1. Set the new Android version in code and `updates/android.json`.
+1. Set the new Android version in code, `android/app/build.gradle.kts`, and `updates/android.json`.
 2. Put the release notes in `updates/android.json`.
-3. Make sure `updates/windows.json` advertises at least the Android build's `minimum_desktop_version`.
+3. Make sure `updates/windows.json` advertises at least the Android build's `minimum_desktop_version` and matching sync protocol.
 4. Push a tag such as `android-v0.8.0`.
 
 The GitHub workflow then builds the signed APK, creates the Android GitHub Release, and updates `updates/android.json` on `main` with the final APK/release URLs. Future installed Android builds read that manifest to find updates.
