@@ -35,7 +35,10 @@ class DidSyncClient(
         data object Disconnected : ConnectionState()
         data object Connecting : ConnectionState()
         data object Pairing : ConnectionState()
-        data class Connected(val computerName: String?) : ConnectionState()
+        data class Connected(
+            val computerName: String?,
+            val desktopVersion: String?,
+        ) : ConnectionState()
         data class Error(val message: String) : ConnectionState()
     }
 
@@ -50,9 +53,13 @@ class DidSyncClient(
                 val json = JSONObject(text)
                 require(json.optString("type") == "did_pairing") { "Not a DID pairing code" }
                 require(json.optInt("protocol", -1) == PROTOCOL) { "Unsupported DID sync protocol" }
+                val host = json.getString("host").trim()
+                val port = json.getInt("port")
+                require(host.isNotBlank()) { "Pairing code has no computer address" }
+                require(port in 1..65535) { "Pairing code has an invalid port" }
                 return PairingPayload(
-                    host = json.getString("host"),
-                    port = json.getInt("port"),
+                    host = host,
+                    port = port,
                     pairingToken = json.getString("pairing_token"),
                     serverId = json.optString("server_id").ifBlank { null },
                 )
@@ -66,6 +73,7 @@ class DidSyncClient(
     private val http = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
         .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     private var socket: WebSocket? = null
@@ -198,6 +206,7 @@ class DidSyncClient(
                 val pairing = pendingPairing ?: return
                 val token = message.getString("device_token")
                 val serverId = message.optString("server_id").ifBlank { pairing.serverId }
+                val desktopVersion = message.optString("desktop_version").ifBlank { null }
                 prefs.edit()
                     .putString(KEY_HOST, pairing.host)
                     .putInt(KEY_PORT, pairing.port)
@@ -205,11 +214,16 @@ class DidSyncClient(
                     .putString(KEY_SERVER_ID, serverId)
                     .apply()
                 pendingPairing = null
-                emit(ConnectionState.Connected(serverId))
+                emit(ConnectionState.Connected(serverId, desktopVersion))
             }
             "hello_ok" -> {
                 revision = message.optInt("revision", revision)
-                emit(ConnectionState.Connected(message.optString("server_id").ifBlank { null }))
+                emit(
+                    ConnectionState.Connected(
+                        computerName = message.optString("server_id").ifBlank { null },
+                        desktopVersion = message.optString("desktop_version").ifBlank { null },
+                    )
+                )
             }
             "state" -> {
                 revision = message.getInt("revision")
