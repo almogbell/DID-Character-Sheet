@@ -13,25 +13,28 @@ def require(path: str, *needles: str) -> None:
 def main() -> None:
     require(
         "android/phase8/DidTheme.kt",
-        "#CDAA63".replace("#", "0xFF"),
+        "0xFFCDAA63",
         "FontFamily.Serif",
         "DidTheme",
     )
     require(
-        "android/phase8/DidCompanionSheet.kt",
-        "Portrait(snapshot",
-        'DefenseBox("BDV"',
-        'DefenseBox("DR"',
+        "android/phase8/Phase8CompanionRoot.kt",
+        "Phase9CompanionSheet(",
+        "onSetName = onSetName",
+        "onAddInventoryItem = onAddInventoryItem",
+    )
+    require(
+        "android/phase8/Phase9CompanionSheet.kt",
+        "Phase9Portrait(snapshot",
+        'Phase9DefenseBox("BDV"',
+        'Phase9DefenseBox("DR"',
         "compareByDescending<StatSnapshot>",
-        "noteColors(note.color)",
+        "phase9NoteColors(note.color)",
         'Character("Character"',
         'Equipment("Equipment"',
         'Notes("Notes"',
-    )
-    require(
-        "android/phase8/DidCompanionDirectEditBridge.kt",
-        "SingleTextEditDialog",
-        "InventoryManagerDialog",
+        "Phase9TextDialog",
+        "Phase9InventoryEditDialog",
         "onSetName",
         "onSetBackstory",
         "onAddInventoryItem",
