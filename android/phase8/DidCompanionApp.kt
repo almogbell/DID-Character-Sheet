@@ -4,11 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,9 +40,7 @@ fun DidCompanionApp(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     var showConnection by remember { mutableStateOf(state.snapshot == null) }
-    var showManualPairing by remember { mutableStateOf(false) }
-    var manualPairingCode by remember { mutableStateOf("") }
-    var manualPairingError by remember { mutableStateOf<String?>(null) }
+    var transientError by remember { mutableStateOf<String?>(null) }
 
     val updateController = remember {
         AndroidUpdateController(
@@ -103,13 +101,17 @@ fun DidCompanionApp(
                             requestQrScan(
                                 { raw ->
                                     viewModel.pairFromQrJson(raw).onFailure { error ->
-                                        manualPairingError = error.message
+                                        transientError = error.message ?: "Invalid pairing code"
                                     }
                                 },
-                                { error -> manualPairingError = error },
+                                { error -> transientError = error },
                             )
                         },
-                        onManualPairing = { showManualPairing = true },
+                        onPairingCodeEntered = { raw ->
+                            viewModel.pairFromQrJson(raw).onFailure { error ->
+                                transientError = error.message ?: "Invalid pairing code"
+                            }
+                        },
                         onReconnect = viewModel::reconnect,
                         onForgetComputer = viewModel::forgetComputer,
                         onRefresh = viewModel::refresh,
@@ -128,50 +130,13 @@ fun DidCompanionApp(
         }
     }
 
-    if (showManualPairing) {
+    transientError?.let { message ->
         AlertDialog(
-            onDismissRequest = { showManualPairing = false },
-            title = { Text("Paste pairing code") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("On Windows, open Mobile Companion, start pairing, and copy the pairing code.")
-                    OutlinedTextField(
-                        value = manualPairingCode,
-                        onValueChange = {
-                            manualPairingCode = it
-                            manualPairingError = null
-                        },
-                        label = { Text("Pairing code") },
-                        minLines = 4,
-                    )
-                    manualPairingError?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error)
-                    }
-                }
-            },
-            confirmButton = {
-                Button(onClick = {
-                    viewModel.pairFromQrJson(manualPairingCode.trim())
-                        .onSuccess {
-                            manualPairingError = null
-                            showManualPairing = false
-                        }
-                        .onFailure { manualPairingError = it.message ?: "Invalid pairing code" }
-                }) { Text("Connect") }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { showManualPairing = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    manualPairingError?.takeIf { !showManualPairing && showConnection }?.let { message ->
-        AlertDialog(
-            onDismissRequest = { manualPairingError = null },
+            onDismissRequest = { transientError = null },
             title = { Text("Could not connect") },
             text = { Text(message) },
             confirmButton = {
-                Button(onClick = { manualPairingError = null }) { Text("OK") }
+                Button(onClick = { transientError = null }) { Text("OK") }
             },
         )
     }
