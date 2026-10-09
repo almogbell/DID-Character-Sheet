@@ -1,26 +1,33 @@
 package com.did.charactersheet.sync
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.did.charactersheet.ui.DidPalette
 
 /**
- * Single Phase 8 entry surface for the existing Android Activity.
- *
- * The host Activity owns QR scanning and Android update launching. This root
- * decides whether to show connection setup or the synchronized character sheet.
+ * Single companion entry surface. Pairing/update launching stays in the host
+ * Activity while this root decides between connection setup and the live sheet.
  */
 @Composable
 fun Phase8CompanionRoot(
@@ -78,23 +85,46 @@ private fun ConnectionBanner(
     onReconnect: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            Box(
+                Modifier
+                    .padding(end = 9.dp)
+                    .size(10.dp)
+                    .background(
+                        if (state.isConnected) DidPalette.Positive else DidPalette.Negative,
+                        CircleShape,
+                    )
+            )
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (state.isConnected) "Connected to Windows" else "Computer unavailable — read only",
+                    if (state.isConnected) "Windows companion connected" else "Computer unavailable — read only",
                     style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Black,
                 )
                 val connected = state.connection as? DidSyncClient.ConnectionState.Connected
                 connected?.desktopVersion?.let {
-                    Text("Windows DID $it", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Windows DID $it  •  Sync ${DidSyncClient.PROTOCOL}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 if (state.reconnectingAutomatically) {
-                    Text("Reconnecting automatically…", style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Reconnecting automatically…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
                 }
                 state.lastError?.takeIf { !state.isConnected }?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
