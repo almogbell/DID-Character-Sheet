@@ -1,16 +1,14 @@
 """Adapter between the finished DID desktop window and MobileSyncServer.
 
-This module deliberately keeps the network layer separate from DID rules.  It
+This module deliberately keeps the network layer separate from DID rules. It
 wraps the existing desktop object model and uses CharacterStorageSystem for the
 canonical state snapshot.
 
 The adapter is intentionally conservative: it only implements the Phase 8
-resource slice (HP / Adversity / IP), validates bounds before mutation, marks the
-character dirty through the desktop window's normal path, and asks the desktop
-UI to refresh.  It does not read or write .didchar files itself.
-
-The final frontend integration should instantiate this adapter with the actual
-main window and existing CharacterStorageSystem class from backend_2_1.py.
+resource slice (HP / Adversity / IP), validates bounds before mutation, respects
+read-only characters, marks the character dirty through the desktop window's
+normal path, and asks the desktop UI to refresh. It does not read or write
+.didchar files itself.
 """
 
 from __future__ import annotations
@@ -28,7 +26,7 @@ class FrontendHooks:
     """Optional explicit hooks for the finished desktop frontend.
 
     Supplying hooks is preferred when the final app has a dedicated method for a
-    resource change or refresh.  If a hook is omitted, the adapter falls back to
+    resource change or refresh. If a hook is omitted, the adapter falls back to
     the stable object-model fields which have existed in the desktop app.
     """
 
@@ -56,6 +54,8 @@ class DesktopSyncAdapter:
 
     def command_handler(self, action: str, payload: dict, base_revision: int, request_id: str) -> None:
         del base_revision, request_id  # revision validation belongs to MobileSyncServer
+        self._ensure_editable()
+
         if action != "resource.change":
             raise MobileSyncValidationError(f"Unsupported mobile action: {action}")
 
@@ -84,6 +84,13 @@ class DesktopSyncAdapter:
     # ------------------------------------------------------------------
     # Resource mutations
     # ------------------------------------------------------------------
+    def _ensure_editable(self) -> None:
+        readonly_check = getattr(self.window, "is_readonly_character", None)
+        if callable(readonly_check) and bool(readonly_check()):
+            raise MobileSyncValidationError(
+                "This character is read-only on the computer and cannot be changed from the phone"
+            )
+
     def _character(self) -> Any:
         character = getattr(self.window, "character", None)
         if character is None:
@@ -141,7 +148,7 @@ class DesktopSyncAdapter:
     # Desktop persistence / refresh
     # ------------------------------------------------------------------
     def _persist_and_refresh(self) -> None:
-        # Prefer the finished app's existing dirty/autosave path.  This preserves
+        # Prefer the finished app's existing dirty/autosave path. This preserves
         # recovery/history behavior instead of making the mobile layer invent a
         # second save implementation.
         if self.hooks.save_after_change is not None:
@@ -154,9 +161,3 @@ class DesktopSyncAdapter:
 
         if self.hooks.refresh_after_change is not None:
             self.hooks.refresh_after_change()
-            return
-
-        # The exact final UI refresh method is intentionally not guessed.  Older
-        # builds expose different page-specific refresh functions.  If the final
-        # frontend needs an explicit refresh, pass refresh_after_change when this
-        # adapter is instantiated.
