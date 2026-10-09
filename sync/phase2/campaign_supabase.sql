@@ -194,7 +194,8 @@ begin
 end;
 $$;
 
-revoke all on function private.did_new_invite_code() from public, anon, authenticated;
+revoke all on function private.did_new_invite_code() from public, anon;
+grant execute on function private.did_new_invite_code() to authenticated;
 alter table public.campaigns alter column invite_code set default private.did_new_invite_code();
 
 -- ============================================================
