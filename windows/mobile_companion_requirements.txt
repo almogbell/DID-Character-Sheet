@@ -1,0 +1,3 @@
+# Additional runtime dependency for the Phase 8 desktop pairing dialog.
+# PySide6 is already an application dependency and provides QtWebSockets.
+qrcode[pil]>=7.4.2,<9
