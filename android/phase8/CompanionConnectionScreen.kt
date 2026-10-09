@@ -11,24 +11,24 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
 
-/**
- * Minimal Phase 8 connection/status surface.
- *
- * This is intentionally small so it can be embedded into the existing DID
- * phone UI without replacing the sheet redesign. QR scanning itself is wired
- * by the host Activity and passes the scanned JSON into onPairingQrScanned.
- */
+/** Connection/pairing surface for Phase 8. */
 @Composable
 fun CompanionConnectionScreen(
     state: DidCompanionViewModel.UiState,
     onPairingQrScanned: () -> Unit,
+    onPairingCodeEntered: (String) -> Unit,
     onReconnect: () -> Unit,
     onForgetComputer: () -> Unit,
     onRefresh: () -> Unit,
@@ -37,28 +37,64 @@ fun CompanionConnectionScreen(
     onIpChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var manualCode by remember { mutableStateOf("") }
+
     Column(modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Computer connection", style = MaterialTheme.typography.titleLarge)
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(connectionLabel(state.connection))
+                if (state.connection is DidSyncClient.ConnectionState.Connected) {
+                    state.connection.desktopVersion?.let { Text("Windows DID: $it") }
+                }
+                Text("Android DID: ${DidCompanionViewModel.ANDROID_VERSION}")
+                Text("Sync protocol: ${DidSyncClient.PROTOCOL}")
+                if (state.revision > 0) Text("Character revision: ${state.revision}")
                 if (state.reconnectingAutomatically) {
                     Text("Trying to reconnect automatically…")
                 }
-                Text("Sync protocol: 1")
-                if (state.revision > 0) Text("Character revision: ${state.revision}")
-                state.lastError?.let {
+                state.minimumVersionProblem?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
+                state.lastError?.takeIf { it != state.minimumVersionProblem }?.let {
                     Text(it, color = MaterialTheme.colorScheme.error)
                 }
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onPairingQrScanned) { Text("Connect phone") }
+            Button(onClick = onPairingQrScanned) { Text("Scan pairing QR") }
             OutlinedButton(onClick = onReconnect) { Text("Reconnect") }
             if (state.isConnected) {
                 OutlinedButton(onClick = onRefresh) { Text("Refresh") }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Can't scan the QR?", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "On Windows choose Copy pairing code, paste it here, then tap Pair.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedTextField(
+                    value = manualCode,
+                    onValueChange = { manualCode = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Pairing code") },
+                    minLines = 2,
+                    maxLines = 5,
+                )
+                Button(
+                    enabled = manualCode.isNotBlank(),
+                    onClick = {
+                        onPairingCodeEntered(manualCode.trim())
+                        manualCode = ""
+                    },
+                ) {
+                    Text("Pair")
+                }
             }
         }
 
