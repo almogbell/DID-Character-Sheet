@@ -22,12 +22,16 @@ from pathlib import Path
 
 INSTALL_MARKER = "# Phase 8: Windows <-> Android mobile companion"
 
+# Match only the confirmed end-of-BaseMainWindow startup sequence, while
+# tolerating blank lines and both LF/CRLF source files. Keeping this anchor
+# intentionally narrow is safer than searching for a generic refresh_all().
 BOOTSTRAP_RE = re.compile(
-    r"(?P<indent>^[ \t]+)self\.setup_keyboard_shortcuts\(\)\s*\n"
-    r"(?P=indent)\s*\n?"
-    r"(?P=indent)self\.refresh_all\(\)\s*\n"
-    r"(?P=indent)self\.reset_undo_history\(\s*\n"
-    r"(?P=indent)[ \t]+treat_current_as_clean=True\s*\n"
+    r"(?P<indent>^[ \t]+)self\.setup_keyboard_shortcuts\(\)[ \t]*\r?\n"
+    r"(?:[ \t]*\r?\n)*"
+    r"(?P=indent)self\.refresh_all\(\)[ \t]*\r?\n"
+    r"(?:[ \t]*\r?\n)*"
+    r"(?P=indent)self\.reset_undo_history\([ \t]*\r?\n"
+    r"(?P=indent)[ \t]+treat_current_as_clean=True[ \t]*\r?\n"
     r"(?P=indent)\)",
     re.MULTILINE,
 )
