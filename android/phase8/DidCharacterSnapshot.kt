@@ -1,5 +1,16 @@
 package com.did.charactersheet.sync
 
+import android.graphics.Typeface
+import android.text.Html
+import android.text.Spanned
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -93,7 +104,7 @@ data class DidCharacterSnapshot(
                     NoteSnapshot(
                         id = note.optString("id").nonBlankOrNull(),
                         title = note.optString("title", ""),
-                        text = note.optString("text", ""),
+                        text = parseNoteText(note.optString("text", "")),
                         color = note.optString("color").nonBlankOrNull(),
                         expanded = note.optBoolean("expanded", true),
                         pinned = note.optBoolean("pinned", false),
@@ -178,7 +189,7 @@ data class InventoryItemSnapshot(
 data class NoteSnapshot(
     val id: String?,
     val title: String,
-    val text: String,
+    val text: AnnotatedString,
     val color: String?,
     val expanded: Boolean,
     val pinned: Boolean,
@@ -194,6 +205,64 @@ data class PortraitSnapshot(
 ) {
     val currentImage: PortraitImageSnapshot?
         get() = images.getOrNull(currentIndex.coerceIn(0, (images.size - 1).coerceAtLeast(0)))
+}
+
+private const val RICH_NOTE_MARKER = "<!--DID_RICH_NOTE-->"
+
+/**
+ * The desktop note editor stores formatted player notes as a tiny, controlled
+ * HTML subset prefixed by RICH_NOTE_MARKER. Android must render that format,
+ * not show the storage markup as literal text.
+ */
+private fun parseNoteText(raw: String): AnnotatedString {
+    val plainNormalized = raw
+        .replace('\u2028', '\n')
+        .replace('\u2029', '\n')
+        .replace("\uFFFC", "")
+
+    if (!raw.startsWith(RICH_NOTE_MARKER)) {
+        return AnnotatedString(plainNormalized)
+    }
+
+    val htmlSource = raw
+        .removePrefix(RICH_NOTE_MARKER)
+        .replace("\u2028", "<br>")
+        .replace("\u2029", "<br>")
+        .replace("\uFFFC", "")
+
+    val spanned: Spanned = Html.fromHtml(htmlSource, Html.FROM_HTML_MODE_LEGACY)
+    return buildAnnotatedString {
+        append(spanned.toString())
+
+        spanned.getSpans(0, spanned.length, StyleSpan::class.java).forEach { span ->
+            val start = spanned.getSpanStart(span).coerceAtLeast(0)
+            val end = spanned.getSpanEnd(span).coerceAtMost(length)
+            if (start >= end) return@forEach
+
+            val style = when (span.style) {
+                Typeface.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
+                Typeface.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
+                Typeface.BOLD_ITALIC -> SpanStyle(
+                    fontWeight = FontWeight.Bold,
+                    fontStyle = FontStyle.Italic,
+                )
+                else -> null
+            }
+            if (style != null) addStyle(style, start, end)
+        }
+
+        spanned.getSpans(0, spanned.length, UnderlineSpan::class.java).forEach { span ->
+            val start = spanned.getSpanStart(span).coerceAtLeast(0)
+            val end = spanned.getSpanEnd(span).coerceAtMost(length)
+            if (start < end) {
+                addStyle(
+                    SpanStyle(textDecoration = TextDecoration.Underline),
+                    start,
+                    end,
+                )
+            }
+        }
+    }
 }
 
 private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> = buildList {
