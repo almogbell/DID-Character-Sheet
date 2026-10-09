@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.did.charactersheet.sync.DidCompanionViewModel
 import com.did.charactersheet.sync.Phase8ActivityBridge
 import com.did.charactersheet.sync.Phase8CompanionRoot
+import com.did.charactersheet.ui.DidTheme
 import com.did.charactersheet.update.AndroidUpdateController
 import com.did.charactersheet.update.UpdateNotice
 
@@ -51,8 +52,11 @@ class MainActivity : ComponentActivity() {
                 phase8Bridge.checkForUpdates { updateState = it }
             }
 
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            DidTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
                     Column(Modifier.fillMaxSize()) {
                         activityMessage?.let { message ->
                             Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
