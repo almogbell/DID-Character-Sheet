@@ -19,13 +19,14 @@ import androidx.compose.ui.unit.dp
 /**
  * Single Phase 8 entry surface for the existing Android Activity.
  *
- * The host Activity owns QR scanning and Android update launching.  This root
+ * The host Activity owns QR scanning and Android update launching. This root
  * decides whether to show connection setup or the synchronized character sheet.
  */
 @Composable
 fun Phase8CompanionRoot(
     state: DidCompanionViewModel.UiState,
     onScanPairingQr: () -> Unit,
+    onManualPairingCode: (String) -> Unit,
     onReconnect: () -> Unit,
     onForgetComputer: () -> Unit,
     onRefresh: () -> Unit,
@@ -40,6 +41,7 @@ fun Phase8CompanionRoot(
         CompanionConnectionScreen(
             state = state,
             onPairingQrScanned = onScanPairingQr,
+            onPairingCodeEntered = onManualPairingCode,
             onReconnect = onReconnect,
             onForgetComputer = onForgetComputer,
             onRefresh = onRefresh,
@@ -87,6 +89,10 @@ private fun ConnectionBanner(
                     if (state.isConnected) "Connected to Windows" else "Computer unavailable — read only",
                     style = MaterialTheme.typography.labelLarge,
                 )
+                val connected = state.connection as? DidSyncClient.ConnectionState.Connected
+                connected?.desktopVersion?.let {
+                    Text("Windows DID $it", style = MaterialTheme.typography.labelSmall)
+                }
                 if (state.reconnectingAutomatically) {
                     Text("Reconnecting automatically…", style = MaterialTheme.typography.labelSmall)
                 }
