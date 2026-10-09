@@ -12,30 +12,38 @@ Phase 5 builds on the verified Phase 4 DM Dashboard.
 - The dashboard can switch between the current session, archived sessions, and campaign-wide recent rolls.
 - **View Snapshots** shows the captured start/end character state for an archived or live session.
 - Players get a desktop Campaign checkbox: **Share my dice rolls during active sessions**.
-- When that checkbox is off, rolls made during an active session are not stored in the DM session log. Rolls outside sessions are unchanged.
+- When that checkbox is off, rolls made while a session is active are not stored in the DM session log. Rolls outside sessions are unchanged.
 - Existing live presence, safe state sync, campaign rules, and dashboard authorization remain unchanged.
 
 ## Install
 
-Copy everything in `sync/phase5` into the current DID project folder, including the `dm_dashboard` folder.
+Keep the update isolated so the installer can back up the existing Phase 4 files before replacing them.
 
-Run:
+Copy the whole `sync/phase5` folder itself into the DID project folder so you have:
 
-```bat
-python install_phase5.py
+```text
+C:\Users\almog\Desktop\current code - new features\phase5\install_phase5.py
 ```
 
-The installer backs up changed UI/dashboard files, compiles the Python changes, and runs the local Phase 5 tests.
+Do **not** manually merge the Phase 5 `dm_dashboard` folder over the current dashboard first.
+
+From the project folder run:
+
+```bat
+python phase5\install_phase5.py
+```
+
+The installer backs up changed UI/dashboard files, copies the Phase 5 files into their live locations, compiles the Python changes, and runs the local Phase 5 tests.
 
 ## Supabase migration
 
-Run the whole file below in the same Supabase project after Phase 4:
+Run the whole live-project file below in the same Supabase project after Phase 4:
 
 ```text
 campaign_supabase_phase5.sql
 ```
 
-Then run the real cloud test:
+Then run the real cloud test from the project folder:
 
 ```bat
 python campaign_session_smoke_test.py
