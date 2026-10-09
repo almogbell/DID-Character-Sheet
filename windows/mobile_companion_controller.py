@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import traceback
 from typing import Any, Iterable, Optional
 
 from PySide6.QtCore import QEvent, QObject, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMenu
 
 try:  # package imports used by tests / repository tooling
@@ -55,6 +57,27 @@ def mobile_companion_insert_index(action_texts: Iterable[str]) -> Optional[int]:
         except ValueError:
             pass
     return len(texts)
+
+
+def insert_menu_action(
+    menu: QMenu,
+    before: Optional[QAction],
+    text: str,
+    callback,
+) -> QAction:
+    """Insert a QAction safely across supported PySide6 versions.
+
+    QWidget.insertAction() requires an actual QAction object. Passing a string
+    works with QMenu.addAction(), but not with insertAction(). Keeping this in a
+    tiny helper also gives the integration tests a direct regression target.
+    """
+    action = QAction(text, menu)
+    action.triggered.connect(callback)
+    if before is not None:
+        menu.insertAction(before, action)
+    else:
+        menu.addAction(action)
+    return action
 
 
 class MobileCompanionController(QObject):
@@ -107,8 +130,8 @@ class MobileCompanionController(QObject):
         # Avoid forcing the finished frontend's existing toggle_tools_menu()
         # implementation to be rewritten. Its QMenu is parented to the main
         # window; when it is shown we recognize it by its normal DID actions and
-        # add Mobile Companion once. Headless unit tests can explicitly disable
-        # this global QApplication event filter while production keeps it on.
+        # add Mobile Companion once. The explicit frontend patch also adds the
+        # row, so this remains only a compatibility fallback.
         app = QApplication.instance()
         if install_tools_event_filter and app is not None:
             app.installEventFilter(self)
@@ -151,7 +174,12 @@ class MobileCompanionController(QObject):
     # ------------------------------------------------------------------
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.Show and isinstance(watched, QMenu):
-            self._maybe_add_tools_action(watched)
+            try:
+                self._maybe_add_tools_action(watched)
+            except Exception:
+                # Never let a compatibility-menu fallback disrupt the desktop
+                # app. The explicit frontend row remains the primary path.
+                traceback.print_exc()
         return super().eventFilter(watched, event)
 
     def _maybe_add_tools_action(self, menu: QMenu) -> None:
@@ -164,12 +192,12 @@ class MobileCompanionController(QObject):
             return
 
         before = actions[insertion_index] if insertion_index < len(actions) else None
-        companion_action = (
-            menu.insertAction(before, self.TOOLS_ACTION_TEXT)
-            if before is not None
-            else menu.addAction(self.TOOLS_ACTION_TEXT)
+        insert_menu_action(
+            menu,
+            before,
+            self.TOOLS_ACTION_TEXT,
+            self.show_dialog,
         )
-        companion_action.triggered.connect(self.show_dialog)
 
     # ------------------------------------------------------------------
     # Mobile command path
