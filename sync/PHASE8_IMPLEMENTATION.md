@@ -20,6 +20,10 @@ Phase 8 changes DID Android from a copied-character-file prototype into a connec
 - stale-command rejection
 - canonical state snapshots
 - authenticated HP / Adversity / IP command transport
+- 64 KiB inbound command/pairing message limit
+- bounded identity/request fields
+- malformed-protocol handling without escaping the network callback
+- `STATE_UNAVAILABLE` response when canonical serialization temporarily fails
 
 ### Windows desktop integration layer
 
@@ -40,6 +44,7 @@ Phase 8 changes DID Android from a copied-character-file prototype into a connec
 - broadcasts desktop-originated state changes without adding networking calls to every existing desktop mutation function
 - detects active-character replacement separately
 - records mobile-originated state signatures before server broadcast so the same mutation is not counted twice
+- identifies the existing DID Tools menu and injects `Mobile Companion` before `Check for Updates`
 
 `windows/mobile_companion_dialog.py`
 
@@ -65,6 +70,8 @@ Phase 8 changes DID Android from a copied-character-file prototype into a connec
 - stale/server rejection handling
 - HP / Adversity / IP commands
 - desktop version exposure for compatibility checks
+- private/link-local IPv4 enforcement for Phase 8 LAN connections
+- pairing-code expiry enforcement
 
 `android/phase8/DidCompanionViewModel.kt`
 
@@ -74,6 +81,7 @@ Phase 8 changes DID Android from a copied-character-file prototype into a connec
 - disables mutations while disconnected or incompatible
 - enforces the minimum Windows version
 - re-fetches canonical state after rejected commands
+- retains the last renderable snapshot but makes it read-only if a newer canonical payload cannot be parsed
 
 ### Android canonical character model and UI
 
@@ -113,6 +121,22 @@ Typed read-only view of the Windows snapshot including:
 
 - Google Code Scanner QR pairing helper
 - no custom camera preview required
+- manual pasted-code fallback remains available
+
+### Buildable Android application
+
+The Phase 8 branch now contains a complete Gradle Android application under `android/`, not only loose Kotlin source files:
+
+- `android/settings.gradle.kts`
+- `android/build.gradle.kts`
+- `android/gradle.properties`
+- `android/app/build.gradle.kts`
+- `android/app/src/main/AndroidManifest.xml`
+- `android/app/src/main/java/com/did/charactersheet/MainActivity.kt`
+
+`MainActivity` wires the companion ViewModel, QR/update bridge, update notice and synchronized companion root. The app is portrait-first and contains no normal `.didchar` ownership/import flow.
+
+GitHub Actions runs a real Gradle `:app:assembleDebug` build and uploads the resulting debug APK as a workflow artifact when compilation succeeds.
 
 ### GitHub Android update flow
 
@@ -120,7 +144,7 @@ Typed read-only view of the Windows snapshot including:
 
 - reads `updates/android.json` from the repository
 - validates the Android manifest before trusting it
-- compares semantic-style app versions
+- compares app versions
 - exposes release notes, required desktop version, sync protocol and download/release URLs
 
 `android/phase8/AndroidUpdateController.kt`
@@ -134,51 +158,63 @@ Typed read-only view of the Windows snapshot including:
 
 - Compose update-available / retry UI
 
+`.github/workflows/android-release.yml`
+
+- validates the Android/Windows compatibility state
+- reconstructs the release keystore from GitHub repository secrets
+- builds a signed release APK
+- creates the `android-vX.Y.Z` GitHub Release
+- uploads the APK
+- finalizes `updates/android.json` on `main` with the published URLs
+
+The keystore itself is never committed. Android's signing identity must remain stable across future releases.
+
 ### GitHub update/compatibility manifests
 
 - `updates/windows.json`
 - `updates/android.json`
 
-Android `0.8.0` currently targets the first sync-enabled Windows release, planned as `1.0.11`, using sync protocol `1`. Android release URLs intentionally remain `null` until a signed APK is actually published.
+Android `0.8.0` currently targets the first sync-enabled Windows release, planned as `1.0.11`, using Sync Protocol v1. Android release URLs intentionally remain `null` until a signed APK is actually published. The currently published Windows `1.0.10` correctly advertises protocol `0` because it predates mobile sync.
 
-`sync/validate_manifests.py` validates:
+Validation cross-checks:
 
 - platform/version/tag consistency
-- Windows/Android protocol agreement
+- Windows/Android protocol compatibility
 - Android code version vs manifest
+- Android Gradle `versionName` vs manifest
 - Android minimum-desktop constant vs manifest
 - release URL consistency
-- that a published Android release never requires a Windows version newer than the advertised Windows release
+- protocol docs/test vectors/code constants
+- buildable Android project/source invariants
 
 ### Automated validation
 
-`.github/workflows/phase8-validation.yml` runs on the Phase 8 branch and relevant pull requests.
+`.github/workflows/phase8-validation.yml` performs three classes of checks:
 
-Windows tests cover:
+1. Python syntax + manifest/protocol/source-contract validation.
+2. Windows PySide6 sync/controller/adapter unit tests on `windows-latest`.
+3. Real Android Gradle debug compilation on `ubuntu-latest`, with the APK uploaded as an Actions artifact when successful.
 
-- pairing/authentication
-- invalid/revoked credentials
-- stale revisions
-- accepted/rejected commands
-- HP / AT / IP adapter behavior
-- read-only character rejection
-- automatic server startup
-- desktop-originated change detection
-- active-character switching
-- prevention of double-counting mobile-originated changes
+Windows tests cover pairing/authentication, invalid/revoked credentials, malformed/oversized input, serializer failure handling, stale revisions, accepted/rejected commands, HP/AT/IP adapter behavior, read-only character rejection, automatic server startup, desktop-originated change detection, active-character switching and prevention of double-counting mobile-originated changes.
 
-## What is intentionally not complete yet
+## Remaining integration boundary
 
-The architecture and isolated Phase 8 modules are implemented, but two full-project integration/build steps still require the actual finished application trees:
+The Android Gradle project and Phase 8 Android application are now integrated on this branch. The remaining code integration boundary is the **latest finished Windows desktop source tree**.
 
-1. **Finished Windows frontend integration** — copy the Phase 8 Windows modules beside the current desktop source, instantiate `install_mobile_companion(...)`, add `Mobile Companion` to the existing Tools menu, include QR/WebSocket dependencies in packaging, and build/test the real installer.
-2. **Full Android Studio integration** — merge the Phase 8 source into the current Android project, wire the existing Activity to `Phase8CompanionRoot`, QR scanning and update notice/controller, add Gradle/network-security configuration, then compile/install on a real Android device.
+The latest Windows source ZIP is already present in the conversation and has been materialized, so it does not need to be uploaded again. The current execution runtime, however, is failing to open/extract that ZIP programmatically. Because the finished desktop app changed after the individually indexed source revisions, the final bootstrap into `frontend_2_8.py`, packaging/spec update and installer build should not be guessed against an older revision.
 
-The user's latest Windows source ZIP and Phase 7 Android project are available in the conversation. Exact archive integration is pending only because the current execution runtime is not successfully opening/extracting those ZIPs; they do not need to be re-uploaded.
+Once the latest archive can be programmatically inspected, the remaining desktop work is intentionally small:
+
+- place the Phase 8 Windows modules beside the finished frontend/backend
+- instantiate `install_mobile_companion(window, CharacterStorageSystem, APP_VERSION)` at the correct main-window bootstrap point
+- ensure shutdown occurs with the window lifecycle
+- include QR/runtime modules in the PyInstaller/installer packaging
+- set the first sync-enabled Windows release/version metadata consistently
+- run the existing DID release tests plus the Phase 8 tests against the real finished source
 
 ## First end-to-end acceptance test
 
-When the integrated builds are ready, the first device test should verify this exact sequence:
+When the integrated Windows build is ready, the first real-device test should verify this exact sequence:
 
 1. Launch sync-enabled Windows DID.
 2. Open Tools -> Mobile Companion -> Start pairing.
@@ -191,4 +227,4 @@ When the integrated builds are ready, the first device test should verify this e
 9. Disconnect Wi-Fi and confirm Android becomes read-only.
 10. Restore the network and confirm automatic reconnect plus a fresh canonical snapshot.
 
-No `.didchar` copy/import step is part of the Phase 8 acceptance flow.
+No `.didchar` copy/import step is part of the Phase 8 acceptance flow. Actual phone testing is still required; CI compilation is not a substitute for device acceptance testing.
