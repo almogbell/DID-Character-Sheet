@@ -168,8 +168,6 @@ data class PortraitSnapshot(
     val scale: Double,
 )
 
-private fun JSONArray?.mapObjects(transform: (JSONObject) -> DidCharacterSnapshot.ImprovementSnapshot): List<DidCharacterSnapshot.ImprovementSnapshot> = error("unused")
-
 private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> = buildList {
     for (i in 0 until length()) {
         optJSONObject(i)?.let { add(transform(it)) }
