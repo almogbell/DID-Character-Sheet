@@ -3,10 +3,12 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from PySide6.QtCore import QCoreApplication, QObject
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QApplication, QMenu
 
 from windows.mobile_companion_controller import (
     MobileCompanionController,
+    insert_menu_action,
     is_did_tools_menu,
     mobile_companion_insert_index,
     normalize_menu_text,
@@ -101,7 +103,10 @@ class FakeServer:
 class ControllerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        # GitHub Actions sets QT_QPA_PLATFORM=offscreen for this job, so a real
+        # QApplication/QMenu can exercise the exact PySide6 insertion API which
+        # previously failed on the user's machine.
+        cls.app = QApplication.instance() or QApplication([])
 
     def make_controller(self):
         self.window = FakeWindow()
@@ -199,6 +204,28 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(normalize_menu_text("Edit &Abilities"), "Edit Abilities")
         self.assertTrue(is_did_tools_menu(actions))
         self.assertEqual(mobile_companion_insert_index(actions), 4)
+
+    def test_insert_menu_action_uses_qaction_and_preserves_order(self):
+        menu = QMenu()
+        edit_action = menu.addAction("Edit Abilities")
+        dice_action = menu.addAction("Dice Roller")
+        triggered = []
+
+        companion = insert_menu_action(
+            menu,
+            dice_action,
+            "Mobile Companion",
+            lambda: triggered.append(True),
+        )
+
+        self.assertEqual(
+            [action.text() for action in menu.actions()],
+            ["Edit Abilities", "Mobile Companion", "Dice Roller"],
+        )
+        self.assertIs(menu.actions()[1], companion)
+        companion.trigger()
+        self.assertEqual(triggered, [True])
+        self.assertIsNotNone(edit_action)
 
 
 if __name__ == "__main__":
