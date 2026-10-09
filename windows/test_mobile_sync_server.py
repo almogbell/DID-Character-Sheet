@@ -9,7 +9,12 @@ from unittest.mock import patch
 
 from PySide6.QtCore import QCoreApplication
 
-from windows.mobile_sync_server import ConnectedClient, MobileSyncServer, SYNC_PROTOCOL
+from windows.mobile_sync_server import (
+    ConnectedClient,
+    MAX_INBOUND_MESSAGE_BYTES,
+    MobileSyncServer,
+    SYNC_PROTOCOL,
+)
 
 
 class FakeSocket:
@@ -86,6 +91,17 @@ class MobileSyncServerTests(unittest.TestCase):
         message["character"]["name"] = "Mutated copy"
         self.assertEqual(self.state["name"], "Test Character")
 
+    def test_state_provider_failure_becomes_protocol_error_not_crash(self):
+        def broken_state():
+            raise RuntimeError("broken serializer")
+
+        self.server.state_provider = broken_state
+        message = self.server._state_message()
+        self.assertEqual(message["type"], "error")
+        self.assertEqual(message["code"], "STATE_UNAVAILABLE")
+        self.assertEqual(message["revision"], 0)
+        self.assertNotIn("broken serializer", message["message"])
+
     def test_pairing_issues_permanent_device_token_and_consumes_pairing_token(self):
         sock = FakeSocket()
         client = ConnectedClient(socket=sock)  # type: ignore[arg-type]
@@ -130,6 +146,22 @@ class MobileSyncServerTests(unittest.TestCase):
         self.assertFalse(client.authenticated)
         self.assertEqual(sock.messages[-1]["type"], "pair_error")
 
+    def test_malformed_protocol_is_rejected_without_exception(self):
+        sock = FakeSocket()
+        client = ConnectedClient(socket=sock)  # type: ignore[arg-type]
+        self.server._handle_hello(
+            client,
+            {
+                "type": "hello",
+                "protocol": "not-an-integer",
+                "device_id": "phone-1",
+                "device_token": "anything",
+            },
+        )
+        self.assertFalse(client.authenticated)
+        self.assertTrue(sock.closed)
+        self.assertEqual(sock.messages[-1]["code"], "PROTOCOL_MISMATCH")
+
     def test_saved_device_can_authenticate_again(self):
         self.server._settings["devices"]["phone-1"] = {
             "device_name": "Test Phone",
@@ -155,6 +187,23 @@ class MobileSyncServerTests(unittest.TestCase):
         self.assertTrue(client.authenticated)
         self.assertEqual(sock.messages[0]["type"], "hello_ok")
         self.assertEqual(sock.messages[1]["type"], "state")
+
+    def test_oversized_inbound_message_is_rejected_and_closed(self):
+        sock = FakeSocket()
+        client = ConnectedClient(socket=sock)  # type: ignore[arg-type]
+        self.server._clients[id(sock)] = client
+        oversized = "x" * (MAX_INBOUND_MESSAGE_BYTES + 1)
+        self.server._on_text(sock, oversized)  # type: ignore[arg-type]
+        self.assertTrue(sock.closed)
+        self.assertEqual(sock.messages[-1]["code"], "MESSAGE_TOO_LARGE")
+
+    def test_invalid_json_is_rejected_without_closing_connection(self):
+        sock = FakeSocket()
+        client = ConnectedClient(socket=sock)  # type: ignore[arg-type]
+        self.server._clients[id(sock)] = client
+        self.server._on_text(sock, "{bad json")  # type: ignore[arg-type]
+        self.assertFalse(sock.closed)
+        self.assertEqual(sock.messages[-1]["code"], "INVALID_JSON")
 
     def test_stale_revision_does_not_mutate_character(self):
         sock = FakeSocket()
