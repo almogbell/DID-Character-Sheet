@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -40,8 +39,8 @@ class SharingPrivacyDialog(QDialog):
         self.note_boxes = {}
 
         self.setWindowTitle("Sharing & Privacy")
-        self.resize(610, 690)
-        self.setMinimumSize(520, 560)
+        self.resize(610, 710)
+        self.setMinimumSize(520, 580)
         set_themed_stylesheet(self, PRIVACY_QSS)
 
         root = QVBoxLayout(self)
@@ -56,7 +55,9 @@ class SharingPrivacyDialog(QDialog):
 
         explanation = QLabel(
             "Choose what this character shares with the campaign DM. Core tactical "
-            "data is required for campaign play. Everything else below is optional."
+            "data is required for campaign play. Everything else below is optional. "
+            "Changes affect the live character and future session snapshots; an archived "
+            "session keeps the information that was explicitly shared when that snapshot was captured."
         )
         explanation.setWordWrap(True)
         root.addWidget(explanation)
@@ -171,7 +172,9 @@ class SharingPrivacyDialog(QDialog):
             if not note_id:
                 continue
             title = str(getattr(note, "title", "") or "Untitled note").strip() or "Untitled note"
-            box = QCheckBox(title)
+            linked = str(getattr(note, "linked_improvement_id", "") or "").strip()
+            label = f"{title}  (linked note)" if linked else title
+            box = QCheckBox(label)
             box.setChecked(note_id in selected)
             self.note_boxes[note_id] = box
             layout.addWidget(box)
