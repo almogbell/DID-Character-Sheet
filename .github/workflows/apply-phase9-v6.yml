@@ -1,0 +1,35 @@
+name: Apply Phase 9 V6 patch
+
+on:
+  push:
+    branches: [phase9-mobile-parity]
+    paths:
+      - "sync/apply_phase9_v6_patch.py"
+      - ".github/workflows/apply-phase9-v6.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase9-mobile-parity
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply V6 patch
+        run: python sync/apply_phase9_v6_patch.py
+      - name: Validate source changes
+        run: |
+          python sync/validate_phase9_mobile.py
+          python -m compileall -q sync windows
+      - name: Commit V6 changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android windows sync/validate_phase9_mobile.py
+          git commit -m "Apply Phase 9 V6 real-device feedback"
+          git push origin phase9-mobile-parity
