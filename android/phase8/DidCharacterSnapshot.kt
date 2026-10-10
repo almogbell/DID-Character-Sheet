@@ -32,6 +32,8 @@ data class DidCharacterSnapshot(
     val inventory: List<InventoryItemSnapshot>,
     val notes: List<NoteSnapshot>,
     val portrait: PortraitSnapshot,
+    /** Exact SVG artwork supplied by the connected Windows DID installation. */
+    val uiIcons: Map<String, String>,
 ) {
     companion object {
         fun fromJson(json: JSONObject): DidCharacterSnapshot {
@@ -56,6 +58,7 @@ data class DidCharacterSnapshot(
             val notesJson = json.optJSONObject("notes")
                 ?.optJSONArray("list_of_notes") ?: JSONArray()
             val imageJson = json.optJSONObject("image") ?: JSONObject()
+            val iconJson = json.optJSONObject("_mobile_ui")?.optJSONObject("icons")
 
             val defenseKey = json.optString("selected_defense_stat_name")
                 .nonBlankOrNull()
@@ -118,6 +121,7 @@ data class DidCharacterSnapshot(
                     offsetY = imageJson.optDouble("offset_y", 0.0),
                     scale = imageJson.optDouble("scale", 1.0),
                 ),
+                uiIcons = iconJson.stringMap(),
             )
         }
 
@@ -230,6 +234,21 @@ private fun parseNoteText(raw: String): AnnotatedString {
         .replace("\u2029", "<br>")
         .replace("\uFFFC", "")
 
+    return htmlToAnnotatedString(htmlSource)
+}
+
+/** Render the small HTML subset also used by built-in/system notes and improvements. */
+fun didHtmlToAnnotatedString(raw: String): AnnotatedString {
+    val normalized = raw
+        .removePrefix(RICH_NOTE_MARKER)
+        .replace('\u2028', '\n')
+        .replace('\u2029', '\n')
+        .replace("\uFFFC", "")
+        .replace("\n", "<br>")
+    return htmlToAnnotatedString(normalized)
+}
+
+private fun htmlToAnnotatedString(htmlSource: String): AnnotatedString {
     val spanned: Spanned = Html.fromHtml(htmlSource, Html.FROM_HTML_MODE_LEGACY)
     return buildAnnotatedString {
         append(spanned.toString())
@@ -290,6 +309,13 @@ private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
             }
         }
     }
+}
+
+private fun JSONObject?.stringMap(): Map<String, String> {
+    if (this == null) return emptyMap()
+    return keys().asSequence().mapNotNull { key ->
+        optString(key).nonBlankOrNull()?.let { key to it }
+    }.toMap()
 }
 
 private fun String.displayStatName(): String =
