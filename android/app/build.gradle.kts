@@ -12,7 +12,7 @@ android {
         applicationId = "com.did.charactersheet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 13
+        versionCode = 14
         versionName = "0.8.0"
     }
 
@@ -21,7 +21,7 @@ android {
             // Keep the Phase 9 Test 2 package stable so each feedback build
             // updates the existing test app instead of creating another icon.
             applicationIdSuffix = ".phase9test2"
-            versionNameSuffix = "-phase9-test2-v6"
+            versionNameSuffix = "-phase9-test2-v7"
         }
 
         release {
@@ -79,6 +79,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.caverock:androidsvg-aar:1.4")
 }
