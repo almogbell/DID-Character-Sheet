@@ -12,16 +12,16 @@ android {
         applicationId = "com.did.charactersheet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 14
+        versionCode = 15
         versionName = "0.8.0"
     }
 
     buildTypes {
         debug {
-            // Keep the Phase 9 Test 2 package stable so each feedback build
-            // updates the existing test app instead of creating another icon.
+            // Keep the Phase 9 Test 2 package stable so every feedback build
+            // updates in place and preserves the saved Windows pairing.
             applicationIdSuffix = ".phase9test2"
-            versionNameSuffix = "-phase9-test2-v7"
+            versionNameSuffix = "-phase9-test2-v8"
         }
 
         release {
