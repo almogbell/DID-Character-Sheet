@@ -11,24 +11,25 @@ FILES = (
     "mobile_sync_frontend_adapter.py",
     "mobile_sync_server.py",
     "mobile_sync_v7.py",
+    "mobile_companion_dialog.py",
 )
 
-README = """DID Character Sheet - Phase 9 V7 desktop delta
+README = """DID Character Sheet - Phase 9 V8 desktop delta
 
 Use this after the Phase 8 Windows companion is already installed and working.
 
 1. Close the Windows DID app.
-2. Copy all three Python files from this ZIP into the same current-code folder:
+2. Copy all four Python files from this ZIP into the same current-code folder:
    mobile_sync_frontend_adapter.py
    mobile_sync_server.py
    mobile_sync_v7.py
+   mobile_companion_dialog.py
 3. Replace the older files when Windows asks.
 4. Start DID normally. You do NOT need to patch frontend_2_8.py again.
 
-V7 adds authoritative absolute HP/AT updates, resource adjustment, ordinary note
-editing, character-picture add/remove, safe Improvement choice/custom editing,
-and Windows-authoritative dice results. It also raises the authenticated message
-limit only so selected character pictures can be transferred from the paired phone.
+V8 keeps the authoritative V7 mobile editing/dice actions and adds the pairing QR
+fix: the Windows QR is generated with high error correction, displayed larger,
+and scaled without smoothing so phone cameras see crisp square modules.
 """
 
 
