@@ -10,6 +10,13 @@ def require(path: str, *needles: str) -> None:
         raise SystemExit(f"{path} is missing Phase 9 invariants: {missing}")
 
 
+def forbid(path: str, *needles: str) -> None:
+    text = (ROOT / path).read_text(encoding="utf-8")
+    present = [needle for needle in needles if needle in text]
+    if present:
+        raise SystemExit(f"{path} contains forbidden V4 leftovers: {present}")
+
+
 def main() -> None:
     require(
         "android/phase8/DidTheme.kt",
@@ -19,30 +26,39 @@ def main() -> None:
     )
     require(
         "android/phase8/Phase8CompanionRoot.kt",
-        "Phase9CompanionSheetV3(",
+        "Phase9CompanionSheetV4(",
         "onSetName = onSetName",
         "onAddInventoryItem = onAddInventoryItem",
     )
     require(
-        "android/phase8/Phase9CompanionSheetV3.kt",
-        "V3Hearts(",
+        "android/phase8/Phase9CompanionSheetV4.kt",
+        "V4NameHeader(",
+        "V4PortraitGallery(",
+        "snapshot.portrait.images.indices.toList()",
+        "V4Hearts(",
         "onQuarterTap",
-        "V3Adversity(",
+        "V4Adversity(",
         "index < at.current",
-        "V3DesktopSvg",
+        "V4DesktopSvg",
         'snapshot.uiIcons["dr"]',
         'snapshot.uiIcons[stat.key]',
         "ContentScale.Fit",
         "didHtmlToAnnotatedString(improvement.description)",
-        "didHtmlToAnnotatedString(note.text.text)",
-        "V3QuantityCircle",
+        "V4NoteDialog(",
+        "v4RenderedNoteText(note)",
+        "V4QuantityCircle",
         'Text("⋮"',
-        'V3Heading("Inventory"',
-        'V3Heading("Notes")',
+        'V4Heading("Inventory"',
+        'V4Heading("Notes")',
         'Character("Character"',
         'Equipment("Equipment"',
         'Notes("Notes"',
         "onRemoveInventoryItem",
+    )
+    forbid(
+        "android/phase8/Phase9CompanionSheetV4.kt",
+        'Text("Improvement Points"',
+        '"${snapshot.progression.currentIp} IP  •  Level ${snapshot.progression.level}"',
     )
     require(
         "android/phase8/DidCharacterSnapshot.kt",
@@ -73,6 +89,7 @@ def main() -> None:
     require(
         "android/app/build.gradle.kts",
         "com.caverock:androidsvg-aar:1.4",
+        "versionCode = 11",
     )
     print("Phase 9 mobile parity invariants OK")
 
