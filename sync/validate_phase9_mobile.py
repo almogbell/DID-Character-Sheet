@@ -7,14 +7,19 @@ def require(path: str, *needles: str) -> None:
     text = (ROOT / path).read_text(encoding="utf-8")
     missing = [needle for needle in needles if needle not in text]
     if missing:
-        raise SystemExit(f"{path} is missing Phase 9 invariants: {missing}")
+        raise SystemExit(f"{path} is missing Phase 9/V8 invariants: {missing}")
 
 
 def forbid(path: str, *needles: str) -> None:
     text = (ROOT / path).read_text(encoding="utf-8")
     present = [needle for needle in needles if needle in text]
     if present:
-        raise SystemExit(f"{path} contains forbidden V4 leftovers: {present}")
+        raise SystemExit(f"{path} contains forbidden obsolete UI: {present}")
+
+
+def require_file(path: str) -> None:
+    if not (ROOT / path).is_file():
+        raise SystemExit(f"Missing required Phase 9/V8 file: {path}")
 
 
 def main() -> None:
@@ -26,95 +31,129 @@ def main() -> None:
     )
     require(
         "android/phase8/Phase8CompanionRoot.kt",
-        "Phase9CompanionSheetV4(",
-        "onSetName = onSetName",
-        "onAddInventoryItem = onAddInventoryItem",
+        "Phase9CompanionSheetV7(",
+        "onSetHp = onSetHp",
+        "onSetAt = onSetAt",
+        "onAddNote = onAddNote",
+        "onPickImages = onPickImages",
+        "onEditImprovement = onEditImprovement",
+        "onRollAbility = onRollAbility",
+        "onRollOtherDice = onRollOtherDice",
     )
     require(
-        "android/phase8/Phase9CompanionSheetV4.kt",
-        "V4NameHeader(",
-        "V4PortraitGallery(",
-        "snapshot.portrait.images.indices.toList()",
-        "V4Hearts(",
-        "onQuarterTap",
-        "V4Adversity(",
-        "index < at.current",
-        "V4DesktopSvg",
-        'snapshot.uiIcons["dr"]',
-        'snapshot.uiIcons[stat.key]',
-        "ContentScale.Fit",
-        "didHtmlToAnnotatedString(improvement.description)",
-        "V4NoteDialog(",
-        "v4RenderedNoteText(note)",
-        "V4InventoryQuantityBox",
-        '"×"',
-        'V4Heading("Inventory"',
-        'V4Heading("Notes")',
-        'Character("Character"',
-        'Equipment("Equipment"',
-        'Notes("Notes"',
-        "onRemoveInventoryItem",
-        "V4AppNavigationIcon",
+        "android/phase8/Phase9CompanionSheetV7.kt",
+        "V7ToolsButton(",
+        'DropdownMenuItem(text = { Text("Add Note") }',
+        'DropdownMenuItem(text = { Text("Add Character Picture") }',
+        'DropdownMenuItem(text = { Text("Adjust Resources") }',
+        'DropdownMenuItem(text = { Text("Roll Other Dice…") }',
+        "V7PortraitGallery(",
+        "onRemoveImage",
+        "onSetHp(target)",
+        "onSetAt(target)",
+        "V7InventoryDialog(",
+        "V7NoteDialog(",
+        "V7ImprovementEditDialog(",
+        "V7QuantityBox(",
+        'Text("+")',
+        'Text("-")',
+        'Text("×"',
         'snapshot.uiIcons["inventory"]',
         'snapshot.uiIcons["notes"]',
-        ".scale(1.48f)",
+        "V7DiceResultDialog(",
+        "V7OtherDiceDialog(",
+        "V7HistoryDialog(",
         "onDoubleTap",
-        "LaunchedEffect(snapshot.hp.current)",
-        "Modifier.size(46.dp, 42.dp)",
-        "Modifier.size(31.dp)",
     )
     forbid(
-        "android/phase8/Phase9CompanionSheetV4.kt",
+        "android/phase8/Phase9CompanionSheetV7.kt",
+        'Text("${snapshot.adversity.current}/${snapshot.adversity.max}"',
         'Text("Improvement Points"',
-        '"${snapshot.progression.currentIp} IP  •  Level ${snapshot.progression.level}"',
-        'Text("${at.current}/${at.max}"',
-        'Text("⋮"',
-        "V4QuantityCircle",
-    )
-    require(
-        "android/phase8/DidCharacterSnapshot.kt",
-        "uiIcons: Map<String, String>",
-        'optJSONObject("_mobile_ui")',
-        "didHtmlToAnnotatedString",
-        "Html.fromHtml",
-        "AnnotatedString",
     )
     require(
         "android/phase8/DidCompanionViewModel.kt",
-        '"identity.set"',
-        '"inventory.add"',
-        '"inventory.update"',
-        '"inventory.remove"',
+        '"resource.set"',
+        '"resource.adjust"',
+        '"note.add"',
+        '"note.update"',
+        '"note.remove"',
+        '"image.add"',
+        '"image.remove"',
+        '"improvement.edit"',
+        '"dice.roll"',
+        "serialized",
+    )
+    require(
+        "android/phase8/DidSyncClient.kt",
+        'const val PREFS_NAME = "did_companion_sync"',
+        ".putString(KEY_DEVICE_TOKEN, token)",
+        ".commit()",
+        "connectSaved()",
+    )
+    require(
+        "android/phase8/PairingScanner.kt",
+        "ScanContract()",
+        "ScanOptions.QR_CODE",
+        "DidSyncClient.PairingPayload.fromQrJson",
+    )
+    require(
+        "windows/mobile_sync_v7.py",
+        'action == "resource.set"',
+        'action == "note.add"',
+        'action == "note.update"',
+        'action == "image.add"',
+        'action == "improvement.edit"',
+        'action == "dice.roll"',
     )
     require(
         "windows/mobile_sync_frontend_adapter.py",
         'state["_mobile_ui"]',
-        '"agility": os.path.join(app_dir, "icons", "agility.svg")',
-        '"dr": os.path.join(app_dir, "icons", "defenses", "dr.svg")',
         '"inventory": os.path.join(app_dir, "icons", "headers", "inventory.svg")',
         'os.path.join(app_dir, "icons", "notes", "custom.svg")',
-        'action == "identity.set"',
-        'action == "inventory.add"',
-        'action == "inventory.update"',
-        'action == "inventory.remove"',
+        "handle_mobile_v7_action",
         "mark_dirty(auto_save=True)",
     )
     require(
-        "android/app/src/main/AndroidManifest.xml",
-        'android:icon="@drawable/did_app_icon"',
-        'android:roundIcon="@drawable/did_app_icon"',
+        "windows/mobile_companion_dialog.py",
+        "QR_DISPLAY_SIZE = 336",
+        "ERROR_CORRECT_Q",
+        "Qt.TransformationMode.FastTransformation",
+        "box_size=10",
+        "border=4",
     )
     require(
-        "android/app/src/main/res/drawable/did_app_icon.xml",
-        "#A87824",
-        "#2F5F91",
+        "sync/build_phase9_desktop_delta.py",
+        '"mobile_companion_dialog.py"',
+        "Phase 9 V8 desktop delta",
+    )
+    require(
+        "android/app/src/main/AndroidManifest.xml",
+        'android.permission.CAMERA',
+        'android.hardware.camera.any',
+        'android:icon="@drawable/did_desktop_icon"',
+        'android:roundIcon="@drawable/did_desktop_icon"',
+        'android:fullBackupContent="@xml/backup_rules"',
+        'android:dataExtractionRules="@xml/data_extraction_rules"',
+    )
+    require_file("android/app/src/main/res/drawable-nodpi/did_desktop_icon.png")
+    require(
+        "android/app/src/main/res/xml/backup_rules.xml",
+        "did_companion_sync.xml",
+    )
+    require(
+        "android/app/src/main/res/xml/data_extraction_rules.xml",
+        "did_companion_sync.xml",
+        "cloud-backup",
+        "device-transfer",
     )
     require(
         "android/app/build.gradle.kts",
+        "com.journeyapps:zxing-android-embedded:4.3.0",
         "com.caverock:androidsvg-aar:1.4",
-        "versionCode = 13",
+        "versionCode = 15",
+        'versionNameSuffix = "-phase9-test2-v8"',
     )
-    print("Phase 9 mobile parity invariants OK")
+    print("Phase 9 V8 mobile parity and pairing invariants OK")
 
 
 if __name__ == "__main__":
