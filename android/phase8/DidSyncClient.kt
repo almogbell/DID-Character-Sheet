@@ -12,12 +12,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 
-/**
- * Phase 8 DID Android companion connection.
- *
- * Windows is authoritative. This client never saves a DID character file and
- * never assumes a mutation succeeded until a canonical `state` message arrives.
- */
+/** Windows-authoritative DID Android companion connection. */
 class DidSyncClient(
     context: Context,
     private val androidVersion: String,
@@ -26,7 +21,7 @@ class DidSyncClient(
     interface Listener {
         fun onConnectionState(state: ConnectionState)
         fun onCharacterState(revision: Int, character: JSONObject?)
-        fun onCommandAccepted(requestId: String, revision: Int) {}
+        fun onCommandAccepted(requestId: String, revision: Int, result: JSONObject?) {}
         fun onCommandRejected(requestId: String?, code: String, message: String) {}
         fun onProtocolMismatch(desktopVersion: String?) {}
     }
@@ -35,10 +30,7 @@ class DidSyncClient(
         data object Disconnected : ConnectionState()
         data object Connecting : ConnectionState()
         data object Pairing : ConnectionState()
-        data class Connected(
-            val computerName: String?,
-            val desktopVersion: String?,
-        ) : ConnectionState()
+        data class Connected(val computerName: String?, val desktopVersion: String?) : ConnectionState()
         data class Error(val message: String) : ConnectionState()
     }
 
@@ -51,18 +43,16 @@ class DidSyncClient(
     ) {
         companion object {
             fun fromQrJson(text: String): PairingPayload {
-                val json = JSONObject(text)
+                val json = JSONObject(text.trim())
                 require(json.optString("type") == "did_pairing") { "Not a DID pairing code" }
                 require(json.optInt("protocol", -1) == PROTOCOL) { "Unsupported DID sync protocol" }
-
                 val host = json.getString("host").trim()
                 val port = json.getInt("port")
                 val token = json.getString("pairing_token").trim()
                 val expires = if (json.has("expires_at")) json.optLong("expires_at", 0L) else 0L
-
                 require(host.isNotBlank()) { "Pairing code has no computer address" }
                 require(isAllowedLanIpv4(host)) {
-                    "For Phase 8, the Windows computer must use a private local-network address."
+                    "The Windows computer must use a private local-network address."
                 }
                 require(port in 1..65535) { "Pairing code has an invalid port" }
                 require(token.length >= 20) { "Pairing code has an invalid token" }
@@ -71,13 +61,12 @@ class DidSyncClient(
                         "This pairing code has expired. Start pairing again on Windows."
                     }
                 }
-
                 return PairingPayload(
-                    host = host,
-                    port = port,
-                    pairingToken = token,
-                    serverId = json.optString("server_id").takeIf { it.isNotBlank() },
-                    expiresAtEpochSeconds = expires.takeIf { it > 0L },
+                    host,
+                    port,
+                    token,
+                    json.optString("server_id").takeIf { it.isNotBlank() },
+                    expires.takeIf { it > 0L },
                 )
             }
 
@@ -88,17 +77,16 @@ class DidSyncClient(
                 if (octets.any { it !in 0..255 }) return false
                 val a = octets[0]
                 val b = octets[1]
-                return a == 10 ||
-                    (a == 172 && b in 16..31) ||
-                    (a == 192 && b == 168) ||
-                    (a == 169 && b == 254) ||
-                    a == 127
+                return a == 10 || (a == 172 && b in 16..31) ||
+                    (a == 192 && b == 168) || (a == 169 && b == 254) || a == 127
             }
         }
     }
 
     private val appContext = context.applicationContext
-    private val prefs = appContext.getSharedPreferences("did_companion_sync", Context.MODE_PRIVATE)
+    // This preference file is included in Android backup/restore. In-place APK
+    // updates retain it automatically, so a normal update must not require pairing again.
+    private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
     private val http = OkHttpClient.Builder()
         .pingInterval(20, TimeUnit.SECONDS)
@@ -146,10 +134,7 @@ class DidSyncClient(
     fun forgetComputer() {
         disconnect()
         prefs.edit()
-            .remove(KEY_HOST)
-            .remove(KEY_PORT)
-            .remove(KEY_SERVER_ID)
-            .remove(KEY_DEVICE_TOKEN)
+            .remove(KEY_HOST).remove(KEY_PORT).remove(KEY_SERVER_ID).remove(KEY_DEVICE_TOKEN)
             .apply()
     }
 
@@ -157,7 +142,6 @@ class DidSyncClient(
         send(JSONObject().put("type", "get_state"))
     }
 
-    /** Generic command. Use specific helpers in UI code where possible. */
     fun sendCommand(action: String, payload: JSONObject): String {
         val requestId = UUID.randomUUID().toString()
         send(
@@ -171,33 +155,28 @@ class DidSyncClient(
         return requestId
     }
 
-    fun changeResource(resource: String, delta: Int): String = sendCommand(
-        action = "resource.change",
-        payload = JSONObject().put("resource", resource).put("delta", delta),
-    )
-
     private fun connectSocket(host: String, port: Int) {
         socket?.cancel()
         emit(ConnectionState.Connecting)
-        val request = Request.Builder().url("ws://$host:$port").build()
-        socket = http.newWebSocket(request, SocketListener())
+        socket = http.newWebSocket(Request.Builder().url("ws://$host:$port").build(), SocketListener())
     }
 
     private inner class SocketListener : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
             val pairing = pendingPairing
             if (pairing != null) {
-                val message = JSONObject()
-                    .put("type", "pair")
-                    .put("protocol", PROTOCOL)
-                    .put("pairing_token", pairing.pairingToken)
-                    .put("device_id", deviceId)
-                    .put("device_name", android.os.Build.MODEL)
-                    .put("android_version", androidVersion)
-                webSocket.send(message.toString())
+                webSocket.send(
+                    JSONObject()
+                        .put("type", "pair")
+                        .put("protocol", PROTOCOL)
+                        .put("pairing_token", pairing.pairingToken)
+                        .put("device_id", deviceId)
+                        .put("device_name", android.os.Build.MODEL)
+                        .put("android_version", androidVersion)
+                        .toString()
+                )
                 return
             }
-
             val token = prefs.getString(KEY_DEVICE_TOKEN, null)
             if (token.isNullOrBlank()) {
                 webSocket.close(1008, "Not paired")
@@ -217,11 +196,8 @@ class DidSyncClient(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            try {
-                handleMessage(JSONObject(text))
-            } catch (e: Exception) {
-                emit(ConnectionState.Error("Invalid response from computer: ${e.message}"))
-            }
+            try { handleMessage(JSONObject(text)) }
+            catch (e: Exception) { emit(ConnectionState.Error("Invalid response from computer: ${e.message}")) }
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -254,12 +230,10 @@ class DidSyncClient(
             }
             "hello_ok" -> {
                 revision = message.optInt("revision", revision)
-                emit(
-                    ConnectionState.Connected(
-                        computerName = message.optString("server_id").nonBlankOrNull(),
-                        desktopVersion = message.optString("desktop_version").nonBlankOrNull(),
-                    )
-                )
+                emit(ConnectionState.Connected(
+                    message.optString("server_id").nonBlankOrNull(),
+                    message.optString("desktop_version").nonBlankOrNull(),
+                ))
             }
             "state" -> {
                 revision = message.getInt("revision")
@@ -269,11 +243,9 @@ class DidSyncClient(
             "command_ok" -> {
                 val requestId = message.optString("request_id")
                 val rev = message.optInt("revision", revision)
-                // Advance immediately, before the following canonical state
-                // message arrives. This prevents a very fast second tap from
-                // being sent with the already-stale pre-command revision.
                 revision = maxOf(revision, rev)
-                main.post { listener.onCommandAccepted(requestId, revision) }
+                val result = message.optJSONObject("result")
+                main.post { listener.onCommandAccepted(requestId, revision, result) }
             }
             "command_error" -> {
                 val requestId = message.optString("request_id").nonBlankOrNull()
@@ -284,26 +256,19 @@ class DidSyncClient(
             "error" -> {
                 val code = message.optString("code", "ERROR")
                 if (code == "PROTOCOL_MISMATCH") {
-                    main.post {
-                        listener.onProtocolMismatch(
-                            message.optString("desktop_version").nonBlankOrNull()
-                        )
-                    }
+                    main.post { listener.onProtocolMismatch(message.optString("desktop_version").nonBlankOrNull()) }
                 }
-                val detail = message.optString("message").nonBlankOrNull() ?: code
-                emit(ConnectionState.Error(detail))
+                emit(ConnectionState.Error(message.optString("message").nonBlankOrNull() ?: code))
             }
             "pair_error", "hello_error" -> {
                 val code = message.optString("code", "Connection rejected")
-                val detail = message.optString("message").nonBlankOrNull() ?: code
-                emit(ConnectionState.Error(detail))
+                emit(ConnectionState.Error(message.optString("message").nonBlankOrNull() ?: code))
             }
         }
     }
 
     private fun send(json: JSONObject) {
-        val ok = socket?.send(json.toString()) ?: false
-        if (!ok) emit(ConnectionState.Error("Not connected to the computer."))
+        if (socket?.send(json.toString()) != true) emit(ConnectionState.Error("Not connected to the computer."))
     }
 
     private fun emit(state: ConnectionState) {
@@ -314,6 +279,7 @@ class DidSyncClient(
 
     companion object {
         const val PROTOCOL = 1
+        const val PREFS_NAME = "did_companion_sync"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_HOST = "host"
         private const val KEY_PORT = "port"
