@@ -1,0 +1,31 @@
+name: Fix mobile V7 import
+
+on:
+  push:
+    branches: [phase9-mobile-parity]
+    paths:
+      - "sync/fix_mobile_v7_import.py"
+      - ".github/workflows/fix-mobile-v7-import.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase9-mobile-parity
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python sync/fix_mobile_v7_import.py
+      - run: python -m compileall -q windows
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add windows/mobile_sync_frontend_adapter.py
+          git commit -m "Make V7 mobile action import package-safe" || exit 0
+          git push origin phase9-mobile-parity
