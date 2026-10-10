@@ -104,10 +104,12 @@ data class DidCharacterSnapshot(
                     )
                 },
                 notes = notesJson.mapObjects { note ->
+                    val rawText = note.optString("text", "")
                     NoteSnapshot(
                         id = note.optString("id").nonBlankOrNull(),
                         title = note.optString("title", ""),
-                        text = parseNoteText(note.optString("text", "")),
+                        rawText = rawText,
+                        text = parseNoteText(rawText),
                         color = note.optString("color").nonBlankOrNull(),
                         expanded = note.optBoolean("expanded", true),
                         pinned = note.optBoolean("pinned", false),
@@ -193,6 +195,7 @@ data class InventoryItemSnapshot(
 data class NoteSnapshot(
     val id: String?,
     val title: String,
+    val rawText: String,
     val text: AnnotatedString,
     val color: String?,
     val expanded: Boolean,
@@ -257,57 +260,33 @@ private fun htmlToAnnotatedString(htmlSource: String): AnnotatedString {
             val start = spanned.getSpanStart(span).coerceAtLeast(0)
             val end = spanned.getSpanEnd(span).coerceAtMost(length)
             if (start >= end) return@forEach
-
-            val style = when (span.style) {
-                Typeface.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
-                Typeface.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
-                Typeface.BOLD_ITALIC -> SpanStyle(
-                    fontWeight = FontWeight.Bold,
-                    fontStyle = FontStyle.Italic,
-                )
-                else -> null
-            }
-            if (style != null) addStyle(style, start, end)
-        }
-
-        spanned.getSpans(0, spanned.length, UnderlineSpan::class.java).forEach { span ->
-            val start = spanned.getSpanStart(span).coerceAtLeast(0)
-            val end = spanned.getSpanEnd(span).coerceAtMost(length)
-            if (start < end) {
-                addStyle(
-                    SpanStyle(textDecoration = TextDecoration.Underline),
+            when (span.style) {
+                Typeface.BOLD -> addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
+                Typeface.ITALIC -> addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
+                Typeface.BOLD_ITALIC -> addStyle(
+                    SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic),
                     start,
                     end,
                 )
             }
         }
-    }
-}
-
-private inline fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> = buildList {
-    for (i in 0 until length()) {
-        optJSONObject(i)?.let { add(transform(it)) }
+        spanned.getSpans(0, spanned.length, UnderlineSpan::class.java).forEach { span ->
+            val start = spanned.getSpanStart(span).coerceAtLeast(0)
+            val end = spanned.getSpanEnd(span).coerceAtMost(length)
+            if (start < end) addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
+        }
     }
 }
 
 private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
     if (this == null) return emptyList()
-    return buildList {
-        for (i in 0 until length()) {
-            when (val item = opt(i)) {
-                is String -> item.nonBlankOrNull()?.let {
-                    add(PortraitImageSnapshot(id = null, data = it))
-                }
-                is JSONObject -> item.optString("display").nonBlankOrNull()?.let { data ->
-                    add(
-                        PortraitImageSnapshot(
-                            id = item.optString("id").nonBlankOrNull(),
-                            data = data,
-                        )
-                    )
-                }
-            }
-        }
+    return (0 until length()).mapNotNull { index ->
+        val item = optJSONObject(index) ?: return@mapNotNull null
+        val data = item.optString("image_data").nonBlankOrNull() ?: return@mapNotNull null
+        PortraitImageSnapshot(
+            id = item.optString("id").nonBlankOrNull(),
+            data = data,
+        )
     }
 }
 
@@ -318,13 +297,12 @@ private fun JSONObject?.stringMap(): Map<String, String> {
     }.toMap()
 }
 
-private fun String.displayStatName(): String =
-    replace('_', ' ')
-        .split(' ')
-        .filter { it.isNotBlank() }
-        .joinToString(" ") { part ->
-            part.lowercase().replaceFirstChar { it.titlecase() }
-        }
+private fun JSONArray.mapObjects(transform: (JSONObject) -> ImprovementSnapshot): List<ImprovementSnapshot> =
+    (0 until length()).mapNotNull { index -> optJSONObject(index)?.let(transform) }
 
-private fun String.nonBlankOrNull(): String? = takeIf { it.isNotBlank() }
+private fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> =
+    (0 until length()).mapNotNull { index -> optJSONObject(index)?.let(transform) }
+
 private fun JSONObject.copyJson(): JSONObject = JSONObject(toString())
+private fun String.nonBlankOrNull(): String? = takeIf { it.isNotBlank() }
+private fun String.displayStatName(): String = replace('_', ' ').replaceFirstChar { it.titlecase() }
