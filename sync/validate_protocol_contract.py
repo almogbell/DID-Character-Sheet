@@ -51,6 +51,7 @@ def validate() -> None:
 
     server = read("windows/mobile_sync_server.py")
     client = read("android/phase8/DidSyncClient.kt")
+    view_model = read("android/phase8/DidCompanionViewModel.kt")
     protocol_doc = read("sync/protocol-v1.md")
 
     server_protocol = extract_int(r"SYNC_PROTOCOL\s*=\s*(\d+)", server, "Windows SYNC_PROTOCOL")
@@ -122,11 +123,16 @@ def validate() -> None:
         '"command_ok"',
         '"command_error"',
         '"PROTOCOL_MISMATCH"',
-        '"resource.change"',
     }
     missing_client = sorted(token for token in required_client_messages if token not in client)
     if missing_client:
         raise AssertionError(f"Android client contract tokens missing: {missing_client}")
+
+    # Protocol v1 still supports the original relative resource.change vector,
+    # but the current Android UI deliberately uses absolute resource.set commands
+    # so rapid Heart/AT taps cannot be applied against stale values.
+    if '"resource.set"' not in view_model:
+        raise AssertionError("Current Android companion must use absolute resource.set commands")
 
     resource_vector = vectors.get("messages", {}).get("resource_change", {})
     if resource_vector.get("type") != "command":

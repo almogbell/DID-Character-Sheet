@@ -12,11 +12,18 @@ android {
         applicationId = "com.did.charactersheet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 8
+        versionCode = 15
         versionName = "0.8.0"
     }
 
     buildTypes {
+        debug {
+            // Keep the Phase 9 Test 2 package stable so every feedback build
+            // updates in place and preserves the saved Windows pairing.
+            applicationIdSuffix = ".phase9test2"
+            versionNameSuffix = "-phase9-test2-v8"
+        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -72,5 +79,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.caverock:androidsvg-aar:1.4")
 }

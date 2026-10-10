@@ -23,15 +23,11 @@ import androidx.compose.ui.unit.dp
 import com.did.charactersheet.sync.DidCompanionViewModel
 import com.did.charactersheet.sync.Phase8ActivityBridge
 import com.did.charactersheet.sync.Phase8CompanionRoot
+import com.did.charactersheet.ui.DidTheme
 import com.did.charactersheet.update.AndroidUpdateController
 import com.did.charactersheet.update.UpdateNotice
 
-/**
- * Portrait-first DID companion host.
- *
- * The actual character model is supplied by the running Windows application;
- * this Activity never opens or saves a .didchar file.
- */
+/** Portrait-first DID companion host. Windows owns the canonical character. */
 class MainActivity : ComponentActivity() {
     private val companionViewModel: DidCompanionViewModel by viewModels()
     private lateinit var phase8Bridge: Phase8ActivityBridge
@@ -42,36 +38,27 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val state by companionViewModel.uiState.collectAsState()
-            var updateState by remember {
-                mutableStateOf<AndroidUpdateController.State>(AndroidUpdateController.State.Idle)
-            }
+            var updateState by remember { mutableStateOf<AndroidUpdateController.State>(AndroidUpdateController.State.Idle) }
             var activityMessage by remember { mutableStateOf<String?>(null) }
 
-            LaunchedEffect(Unit) {
-                phase8Bridge.checkForUpdates { updateState = it }
-            }
+            LaunchedEffect(Unit) { phase8Bridge.checkForUpdates { updateState = it } }
 
-            MaterialTheme {
-                Surface(Modifier.fillMaxSize()) {
+            DidTheme {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize()) {
                         activityMessage?.let { message ->
                             Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-                                Text(
-                                    text = message,
-                                    modifier = Modifier.padding(12.dp),
-                                    color = MaterialTheme.colorScheme.error,
-                                )
+                                Text(message, Modifier.padding(12.dp), color = MaterialTheme.colorScheme.error)
                             }
                         }
 
                         UpdateNotice(
                             state = updateState,
-                            onCheckAgain = {
-                                phase8Bridge.checkForUpdates { updateState = it }
-                            },
+                            onCheckAgain = { phase8Bridge.checkForUpdates { updateState = it } },
                             onInstall = { info ->
-                                phase8Bridge.openUpdate(info)
-                                    .onFailure { activityMessage = it.message ?: "Could not open the update." }
+                                phase8Bridge.openUpdate(info).onFailure {
+                                    activityMessage = it.message ?: "Could not open the update."
+                                }
                             },
                             modifier = Modifier.padding(horizontal = 12.dp),
                         )
@@ -83,10 +70,7 @@ class MainActivity : ComponentActivity() {
                                 phase8Bridge.scanPairingQr { activityMessage = it }
                             },
                             onManualPairingCode = { code ->
-                                activityMessage = phase8Bridge
-                                    .pairFromPastedCode(code)
-                                    .exceptionOrNull()
-                                    ?.message
+                                activityMessage = phase8Bridge.pairFromPastedCode(code).exceptionOrNull()?.message
                             },
                             onReconnect = companionViewModel::reconnect,
                             onForgetComputer = companionViewModel::forgetComputer,
@@ -94,6 +78,32 @@ class MainActivity : ComponentActivity() {
                             onHpChange = companionViewModel::changeHp,
                             onAtChange = companionViewModel::changeAdversity,
                             onIpChange = companionViewModel::changeImprovementPoints,
+                            onSetHp = companionViewModel::setHp,
+                            onSetAt = companionViewModel::setAdversity,
+                            onSetName = companionViewModel::setCharacterName,
+                            onSetBackstory = companionViewModel::setBackstory,
+                            onAddInventoryItem = companionViewModel::addInventoryItem,
+                            onUpdateInventoryItem = companionViewModel::updateInventoryItem,
+                            onRemoveInventoryItem = companionViewModel::removeInventoryItem,
+                            onAddNote = companionViewModel::addNote,
+                            onUpdateNote = companionViewModel::updateNote,
+                            onRemoveNote = companionViewModel::removeNote,
+                            onPickImages = {
+                                activityMessage = null
+                                phase8Bridge.pickCharacterImages { picked ->
+                                    picked.onSuccess { images ->
+                                        if (images.isNotEmpty()) companionViewModel.addCharacterImages(images)
+                                    }.onFailure {
+                                        activityMessage = it.message ?: "Could not add the selected picture."
+                                    }
+                                }
+                            },
+                            onRemoveImage = companionViewModel::removeCharacterImage,
+                            onEditImprovement = companionViewModel::editImprovement,
+                            onAdjustResources = companionViewModel::adjustResources,
+                            onRollAbility = companionViewModel::rollAbility,
+                            onRollOtherDice = companionViewModel::rollOtherDice,
+                            onClearDiceResult = companionViewModel::clearDiceResult,
                             modifier = Modifier.weight(1f),
                         )
                     }

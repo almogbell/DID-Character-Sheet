@@ -34,10 +34,11 @@ def validate() -> None:
         "GitHubUpdateChecker.kt",
         "AndroidUpdateController.kt",
         "UpdateNotice.kt",
+        "Phase9CompanionSheetV7.kt",
     }
     missing = sorted(name for name in expected if not (ANDROID / name).exists())
     if missing:
-        raise AssertionError(f"Missing Phase 8 Android source files: {missing}")
+        raise AssertionError(f"Missing Android companion source files: {missing}")
 
     required_project_files = (
         ROOT / "android" / "settings.gradle.kts",
@@ -51,16 +52,24 @@ def validate() -> None:
         raise AssertionError(f"Missing buildable Android project files: {missing_project}")
 
     client = read("DidSyncClient.kt")
-    require(client, 'action = "resource.change"', "DidSyncClient")
     require(client, "isAllowedLanIpv4", "DidSyncClient")
     require(client, '"expires_at"', "DidSyncClient")
     require(client, "desktopVersion", "DidSyncClient")
+    require(client, "connectSaved()", "DidSyncClient")
+    require(client, 'PREFS_NAME = "did_companion_sync"', "DidSyncClient")
+    require(client, ".commit()", "DidSyncClient")
     forbid(client, "didchar", "DidSyncClient")
 
     view_model = read("DidCompanionViewModel.kt")
     require(view_model, 'const val ANDROID_VERSION = "0.8.0"', "DidCompanionViewModel")
     require(view_model, 'const val MINIMUM_DESKTOP_VERSION = "1.0.11"', "DidCompanionViewModel")
     require(view_model, "snapshot: DidCharacterSnapshot?", "DidCompanionViewModel")
+    for action in (
+        '"resource.set"', '"resource.adjust"', '"inventory.update"',
+        '"note.add"', '"note.update"', '"image.add"',
+        '"improvement.edit"', '"dice.roll"',
+    ):
+        require(view_model, action, "DidCompanionViewModel")
 
     snapshot = read("DidCharacterSnapshot.kt")
     for key in (
@@ -75,24 +84,20 @@ def validate() -> None:
         require(snapshot, key, "DidCharacterSnapshot")
 
     # Compose's public weight modifier is a RowScope/ColumnScope extension.
-    # Explicitly importing androidx.compose.foundation.layout.weight resolved to
-    # an internal implementation property with this dependency set, so ensure
-    # our source uses scoped Modifier.weight(...) without that import.
     for name in ("DidCompanionSheet.kt", "Phase8CompanionRoot.kt"):
         text = read(name)
         require(text, "Modifier.weight(", name)
         forbid(text, "import androidx.compose.foundation.layout.weight", name)
 
-    sheet = read("DidCompanionSheet.kt")
-    for label in ("Character", "Equipment", "Notes", "Abilities", "Improvements"):
-        require(sheet, f'"{label}"', "DidCompanionSheet")
-
     root = read("Phase8CompanionRoot.kt")
+    require(root, "Phase9CompanionSheetV7", "Phase8CompanionRoot")
     require(root, "onManualPairingCode", "Phase8CompanionRoot")
+    require(root, "onRollOtherDice", "Phase8CompanionRoot")
 
     scanner = read("PairingScanner.kt")
-    require(scanner, "com.google.mlkit.vision.codescanner.GmsBarcodeScanner", "PairingScanner")
-    forbid(scanner, "com.google.android.gms.codescanner", "PairingScanner")
+    require(scanner, "com.journeyapps.barcodescanner.ScanContract", "PairingScanner")
+    require(scanner, "ScanOptions.QR_CODE", "PairingScanner")
+    require(scanner, "DidSyncClient.PairingPayload.fromQrJson", "PairingScanner")
 
     checker = read("GitHubUpdateChecker.kt")
     require(checker, 'json.optString("platform") == "android"', "GitHubUpdateChecker")
@@ -104,6 +109,7 @@ def validate() -> None:
 
     bridge = read("Phase8ActivityBridge.kt")
     require(bridge, "PairingScanner", "Phase8ActivityBridge")
+    require(bridge, "GetMultipleContents", "Phase8ActivityBridge")
     require(bridge, "AndroidUpdateController", "Phase8ActivityBridge")
 
     main_activity = required_project_files[-1].read_text(encoding="utf-8")
@@ -115,15 +121,15 @@ def validate() -> None:
     app_gradle = (APP / "build.gradle.kts").read_text(encoding="utf-8")
     require(app_gradle, 'java.srcDir("../phase8")', "android/app/build.gradle.kts")
     require(app_gradle, 'implementation("com.squareup.okhttp3:okhttp:4.12.0")', "android/app/build.gradle.kts")
-    require(app_gradle, 'implementation("com.google.android.gms:play-services-code-scanner:16.1.0")', "android/app/build.gradle.kts")
+    require(app_gradle, 'implementation("com.journeyapps:zxing-android-embedded:4.3.0")', "android/app/build.gradle.kts")
 
     manifest = (APP / "src" / "main" / "AndroidManifest.xml").read_text(encoding="utf-8")
     require(manifest, 'android.permission.INTERNET', "AndroidManifest.xml")
+    require(manifest, 'android.permission.CAMERA', "AndroidManifest.xml")
     require(manifest, 'android:usesCleartextTraffic="true"', "AndroidManifest.xml")
 
-    # The companion source may mention .didchar in documentation comments, but
-    # none of the transport/UI files should contain file I/O APIs for character
-    # persistence. Windows remains the owner of character files.
+    # Android never owns the .didchar persistence path; it only sends commands
+    # to the authoritative Windows process.
     forbidden_io = ("FileOutputStream", "writeText(", "openFileOutput(")
     for path in ANDROID.glob("*.kt"):
         text = path.read_text(encoding="utf-8")
@@ -133,7 +139,7 @@ def validate() -> None:
             if token in text:
                 raise AssertionError(f"{path.name}: Android companion unexpectedly contains persistence API {token!r}")
 
-    print("Phase 8 Android source invariants valid")
+    print("Current Android companion source invariants valid")
 
 
 if __name__ == "__main__":

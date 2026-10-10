@@ -1,0 +1,72 @@
+name: Extract real DID launcher icon
+
+on:
+  push:
+    branches: [phase9-mobile-parity]
+    paths:
+      - ".github/workflows/extract-did-app-icon.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: phase9-mobile-parity
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install icon extraction dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq innoextract
+          python -m pip install --quiet pillow
+      - name: Extract the Windows DID app icon
+        run: |
+          curl -L --fail --retry 3 -o /tmp/did-installer.exe \
+            https://github.com/almogbell/DID-Character-Sheet/releases/download/v1.0.10/DID_Character_Sheet_Setup_1.0.10.exe
+          rm -rf /tmp/did-installer
+          mkdir -p /tmp/did-installer
+          innoextract -q -d /tmp/did-installer /tmp/did-installer.exe
+          ICON="$(find /tmp/did-installer -type f -iname 'app_icon.ico' | head -n 1)"
+          if [ -z "$ICON" ]; then
+            echo "app_icon.ico was not found in the official DID installer" >&2
+            find /tmp/did-installer -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+          mkdir -p android/app/src/main/res/drawable-nodpi
+          ICON="$ICON" python - <<'PY'
+          import os
+          from PIL import Image
+
+          source = os.environ["ICON"]
+          image = Image.open(source)
+          frames = []
+          index = 0
+          while True:
+              try:
+                  image.seek(index)
+              except EOFError:
+                  break
+              frames.append(image.convert("RGBA").copy())
+              index += 1
+          if not frames:
+              raise SystemExit("No image frames in app_icon.ico")
+          best = max(frames, key=lambda frame: frame.width * frame.height)
+          best.save("android/app/src/main/res/drawable-nodpi/did_app_icon_real.png")
+          print("Extracted", source, "->", best.size)
+          PY
+      - name: Commit real launcher icon
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android/app/src/main/res/drawable-nodpi/did_app_icon_real.png
+          if git diff --cached --quiet; then
+            echo "Launcher icon already current"
+          else
+            git commit -m "Use the real Windows DID app icon on Android"
+            git push origin phase9-mobile-parity
+          fi

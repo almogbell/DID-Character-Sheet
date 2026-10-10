@@ -1,8 +1,8 @@
-name: Phase 8 validation
+name: DID validation
 
 on:
   push:
-    branches: [main, phase8-sync]
+    branches: [main, phase8-sync, phase9-mobile-parity]
     paths:
       - "updates/**"
       - "sync/**"
@@ -25,14 +25,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Compile Phase 8 Python sources
+      - name: Compile DID sync Python sources
         run: python -m compileall -q sync windows
       - name: Validate update manifests and Android protocol constants
         run: python sync/validate_manifests.py
       - name: Validate cross-platform sync protocol contract
         run: python sync/validate_protocol_contract.py
-      - name: Validate Phase 8 Android source invariants
+      - name: Validate Android companion source invariants
         run: python sync/validate_android_phase8_sources.py
+      - name: Validate Phase 9 mobile parity invariants
+        run: python sync/validate_phase9_mobile.py
       - name: Build Windows Phase 8 integration bundle
         run: python sync/build_windows_phase8_bundle.py
       - name: Upload Windows Phase 8 integration bundle
@@ -40,6 +42,14 @@ jobs:
         with:
           name: did-phase8-windows-integration
           path: dist/DID_Phase8_Windows_Integration.zip
+          if-no-files-found: error
+      - name: Build Phase 9 Windows delta
+        run: python sync/build_phase9_desktop_delta.py
+      - name: Upload Phase 9 Windows delta
+        uses: actions/upload-artifact@v4
+        with:
+          name: did-phase9-windows-delta
+          path: dist/DID_Phase9_Desktop_Delta.zip
           if-no-files-found: error
 
   sync-server-tests:
@@ -53,7 +63,7 @@ jobs:
           python-version: "3.12"
       - name: Install sync test dependency
         run: python -m pip install PySide6
-      - name: Run Phase 8 Windows sync and integration tests
+      - name: Run Windows sync and integration tests
         run: >-
           python -m unittest
           windows.test_mobile_sync_server
@@ -70,6 +80,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+      - name: Restore stable DID debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: did-android-debug-keystore-v1
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
@@ -79,6 +94,6 @@ jobs:
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: did-android-phase8-debug
+          name: did-android-phase9-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

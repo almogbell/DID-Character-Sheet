@@ -27,7 +27,7 @@ from PySide6.QtWebSockets import QWebSocket, QWebSocketServer
 SYNC_PROTOCOL = 1
 DEFAULT_PORT = 8765
 PAIRING_TTL_SECONDS = 300
-MAX_INBOUND_MESSAGE_BYTES = 64 * 1024
+MAX_INBOUND_MESSAGE_BYTES = 12 * 1024 * 1024
 MAX_DEVICE_ID_CHARS = 128
 MAX_DEVICE_NAME_CHARS = 120
 MAX_VERSION_CHARS = 64
@@ -35,7 +35,7 @@ MAX_REQUEST_ID_CHARS = 128
 MAX_ACTION_CHARS = 96
 
 StateProvider = Callable[[], Optional[dict]]
-CommandHandler = Callable[[str, dict, int, str], None]
+CommandHandler = Callable[[str, dict, int, str], Optional[dict]]
 
 
 @dataclass
@@ -383,7 +383,7 @@ class MobileSyncServer(QObject):
             payload = {}
         try:
             # This callback MUST perform the desktop's normal validation and save.
-            self.command_handler(action, payload, base_revision, request_id)
+            command_result = self.command_handler(action, payload, base_revision, request_id)
         except Exception as exc:  # surface desktop validation without crashing server
             self.commandRejected.emit(str(exc))
             self._send(
@@ -399,14 +399,14 @@ class MobileSyncServer(QObject):
             return
 
         self._revision += 1
-        self._send(
-            client.socket,
-            {
-                "type": "command_ok",
-                "request_id": request_id,
-                "revision": self._revision,
-            },
-        )
+        response = {
+            "type": "command_ok",
+            "request_id": request_id,
+            "revision": self._revision,
+        }
+        if isinstance(command_result, dict):
+            response["result"] = command_result
+        self._send(client.socket, response)
         self.broadcast_state()
 
     # ------------------------------------------------------------------
