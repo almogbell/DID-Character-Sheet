@@ -84,8 +84,8 @@ class DidSyncClient(
     }
 
     private val appContext = context.applicationContext
-    // This preference file is included in Android backup/restore. In-place APK
-    // updates retain it automatically, so a normal update must not require pairing again.
+    // In-place APK updates keep this file. Android backup/restore rules also
+    // include it, so a normal DID update must not force the phone to pair again.
     private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
     private val http = OkHttpClient.Builder()
@@ -99,8 +99,10 @@ class DidSyncClient(
     @Volatile private var revision: Int = 0
 
     private val deviceId: String by lazy {
-        prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString().also {
-            prefs.edit().putString(KEY_DEVICE_ID, it).apply()
+        prefs.getString(KEY_DEVICE_ID, null) ?: UUID.randomUUID().toString().also { generated ->
+            check(prefs.edit().putString(KEY_DEVICE_ID, generated).commit()) {
+                "Could not save this phone's DID device identity."
+            }
         }
     }
 
@@ -135,7 +137,7 @@ class DidSyncClient(
         disconnect()
         prefs.edit()
             .remove(KEY_HOST).remove(KEY_PORT).remove(KEY_SERVER_ID).remove(KEY_DEVICE_TOKEN)
-            .apply()
+            .commit()
     }
 
     fun requestFreshState() {
@@ -219,12 +221,13 @@ class DidSyncClient(
                 val serverId = message.optString("server_id").nonBlankOrNull() ?: pairing.serverId
                 val desktopVersion = message.optString("desktop_version").nonBlankOrNull()
                 require(token.length >= 20) { "Computer returned an invalid device credential" }
-                prefs.edit()
+                val saved = prefs.edit()
                     .putString(KEY_HOST, pairing.host)
                     .putInt(KEY_PORT, pairing.port)
                     .putString(KEY_DEVICE_TOKEN, token)
                     .putString(KEY_SERVER_ID, serverId)
-                    .apply()
+                    .commit()
+                require(saved) { "Could not save the DID pairing on this phone." }
                 pendingPairing = null
                 emit(ConnectionState.Connected(serverId, desktopVersion))
             }
