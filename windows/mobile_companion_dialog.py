@@ -25,8 +25,10 @@ from PySide6.QtWidgets import (
 
 try:
     import qrcode
+    from qrcode.constants import ERROR_CORRECT_Q
 except Exception:  # Optional until packaging is updated.
     qrcode = None
+    ERROR_CORRECT_Q = None
 
 try:  # package import used by tests / repository tooling
     from .mobile_sync_server import MobileSyncServer
@@ -37,11 +39,13 @@ except ImportError:  # sibling import used by the packaged desktop app
 class MobileCompanionDialog(QDialog):
     """Pair phones and revoke previously paired companion devices."""
 
+    QR_DISPLAY_SIZE = 336
+
     def __init__(self, server: MobileSyncServer, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self.server = server
         self.setWindowTitle("Mobile Companion")
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(560)
 
         layout = QVBoxLayout(self)
 
@@ -58,7 +62,8 @@ class MobileCompanionDialog(QDialog):
 
         self.qr_label = QLabel("Pairing is not active.")
         self.qr_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.qr_label.setMinimumHeight(250)
+        self.qr_label.setMinimumHeight(self.QR_DISPLAY_SIZE + 8)
+        self.qr_label.setMinimumWidth(self.QR_DISPLAY_SIZE + 8)
         layout.addWidget(self.qr_label)
 
         self.pairing_text = QLabel("")
@@ -132,12 +137,14 @@ class MobileCompanionDialog(QDialog):
             self.qr_label.setText("QR support is unavailable in this build.\nUse Copy pairing code instead.")
         else:
             self.qr_label.setText("")
+            # QR modules must stay hard-edged. SmoothTransformation blurred the
+            # old 240px code and made real phone cameras unreliable.
             self.qr_label.setPixmap(
                 pixmap.scaled(
-                    240,
-                    240,
+                    self.QR_DISPLAY_SIZE,
+                    self.QR_DISPLAY_SIZE,
                     Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
+                    Qt.TransformationMode.FastTransformation,
                 )
             )
 
@@ -180,9 +187,18 @@ class MobileCompanionDialog(QDialog):
     def _qr_pixmap(text: str) -> Optional[QPixmap]:
         if qrcode is None:
             return None
-        image = qrcode.make(text)
         try:
             import io
+
+            qr = qrcode.QRCode(
+                version=None,
+                error_correction=ERROR_CORRECT_Q,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(text)
+            qr.make(fit=True)
+            image = qr.make_image(fill_color="black", back_color="white")
 
             raw = io.BytesIO()
             image.save(raw, format="PNG")
