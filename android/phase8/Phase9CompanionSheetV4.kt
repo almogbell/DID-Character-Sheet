@@ -59,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -117,12 +118,13 @@ fun Phase9CompanionSheetV4(
                 controlsEnabled = canEdit,
                 onAdd = { addingInventory = true },
                 onEdit = { inventoryEdit = it },
+                onUpdate = onUpdateInventoryItem,
                 onRemove = onRemoveInventoryItem,
                 modifier = Modifier.weight(1f),
             )
             V4Page.Notes -> V4NotesPage(snapshot, Modifier.weight(1f))
         }
-        V4BottomNavigation(page, onPage = { page = it })
+        V4BottomNavigation(page, snapshot, onPage = { page = it })
     }
 
     if (editName) {
@@ -166,7 +168,7 @@ private enum class V4Page(val label: String) {
 }
 
 @Composable
-private fun V4BottomNavigation(page: V4Page, onPage: (V4Page) -> Unit) {
+private fun V4BottomNavigation(page: V4Page, snapshot: DidCharacterSnapshot, onPage: (V4Page) -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 8.dp,
@@ -177,7 +179,7 @@ private fun V4BottomNavigation(page: V4Page, onPage: (V4Page) -> Unit) {
                 NavigationBarItem(
                     selected = page == item,
                     onClick = { onPage(item) },
-                    icon = { V4AppNavigationIcon(item, selected = page == item) },
+                    icon = { V4AppNavigationIcon(item, selected = page == item, snapshot = snapshot) },
                     label = { Text(item.label) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -193,15 +195,17 @@ private fun V4BottomNavigation(page: V4Page, onPage: (V4Page) -> Unit) {
 }
 
 @Composable
-private fun V4AppNavigationIcon(page: V4Page, selected: Boolean) {
-    val color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
-    else MaterialTheme.colorScheme.onSurfaceVariant
-    Canvas(Modifier.size(28.dp)) {
-        val stroke = Stroke(width = 2.0f, cap = StrokeCap.Round, join = StrokeJoin.Round)
-        val w = size.width
-        val h = size.height
-        when (page) {
-            V4Page.Character -> {
+private fun V4AppNavigationIcon(page: V4Page, selected: Boolean, snapshot: DidCharacterSnapshot) {
+    when (page) {
+        V4Page.Equipment -> V4DesktopSvg(snapshot.uiIcons["inventory"], Modifier.size(30.dp))
+        V4Page.Notes -> V4DesktopSvg(snapshot.uiIcons["notes"], Modifier.size(30.dp))
+        V4Page.Character -> {
+            val color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+            else MaterialTheme.colorScheme.onSurfaceVariant
+            Canvas(Modifier.size(28.dp)) {
+                val stroke = Stroke(width = 2.0f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                val w = size.width
+                val h = size.height
                 val points = listOf(
                     Offset(w * .50f, h * .14f), Offset(w * .548f, h * .384f),
                     Offset(w * .755f, h * .245f), Offset(w * .616f, h * .452f),
@@ -219,47 +223,6 @@ private fun V4AppNavigationIcon(page: V4Page, selected: Boolean) {
                 }
                 drawPath(path, color, style = stroke)
                 drawCircle(color, radius = w * .045f, center = Offset(w / 2f, h / 2f), style = stroke)
-            }
-            V4Page.Equipment -> {
-                val bag = Path().apply {
-                    moveTo(w * .24f, h * .40f)
-                    quadraticBezierTo(w * .24f, h * .34f, w * .32f, h * .34f)
-                    lineTo(w * .68f, h * .34f)
-                    quadraticBezierTo(w * .76f, h * .34f, w * .76f, h * .40f)
-                    lineTo(w * .76f, h * .78f)
-                    quadraticBezierTo(w * .76f, h * .82f, w * .70f, h * .82f)
-                    lineTo(w * .30f, h * .82f)
-                    quadraticBezierTo(w * .24f, h * .82f, w * .24f, h * .78f)
-                    close()
-                }
-                drawPath(bag, color, style = stroke)
-                val handle = Path().apply {
-                    moveTo(w * .34f, h * .38f)
-                    cubicTo(w * .36f, h * .12f, w * .64f, h * .12f, w * .66f, h * .38f)
-                }
-                drawPath(handle, color, style = stroke)
-                drawLine(color, Offset(w * .39f, h * .29f), Offset(w * .61f, h * .29f), strokeWidth = 2f)
-            }
-            V4Page.Notes -> {
-                val left = Path().apply {
-                    moveTo(w * .12f, h * .25f)
-                    quadraticBezierTo(w * .30f, h * .17f, w * .48f, h * .29f)
-                    lineTo(w * .48f, h * .78f)
-                    quadraticBezierTo(w * .30f, h * .67f, w * .12f, h * .74f)
-                    close()
-                }
-                val right = Path().apply {
-                    moveTo(w * .52f, h * .29f)
-                    quadraticBezierTo(w * .70f, h * .17f, w * .88f, h * .25f)
-                    lineTo(w * .88f, h * .74f)
-                    quadraticBezierTo(w * .70f, h * .67f, w * .52f, h * .78f)
-                    close()
-                }
-                drawPath(left, color, style = stroke)
-                drawPath(right, color, style = stroke)
-                drawLine(color, Offset(w * .50f, h * .29f), Offset(w * .50f, h * .79f), strokeWidth = 2f)
-                drawLine(color, Offset(w * .20f, h * .39f), Offset(w * .40f, h * .42f), strokeWidth = 1.6f)
-                drawLine(color, Offset(w * .60f, h * .42f), Offset(w * .80f, h * .39f), strokeWidth = 1.6f)
             }
         }
     }
@@ -373,7 +336,7 @@ private fun V4PortraitGallery(snapshot: DidCharacterSnapshot) {
                                 bitmap = bitmap.asImageBitmap(),
                                 contentDescription = "Character image ${index + 1}",
                                 contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize().scale(1.48f),
                             )
                         } else {
                             Text("Image ${index + 1}", style = MaterialTheme.typography.labelSmall)
@@ -543,7 +506,6 @@ private fun V4Adversity(at: AdversitySnapshot, enabled: Boolean, onAtChange: (In
                 drawPath(p, border, style = Stroke(width = 2f, join = StrokeJoin.Round))
             }
         }
-        Text("${at.current}/${at.max}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -803,6 +765,7 @@ private fun V4EquipmentPage(
     controlsEnabled: Boolean,
     onAdd: () -> Unit,
     onEdit: (InventoryItemSnapshot) -> Unit,
+    onUpdate: (String, String, String, Int) -> Unit,
     onRemove: (String) -> Unit,
     modifier: Modifier,
 ) {
@@ -819,50 +782,56 @@ private fun V4EquipmentPage(
             if (snapshot.inventory.isEmpty()) item { V4Empty("No equipment.") }
             items(snapshot.inventory, key = { it.id ?: "${it.name}:${it.quantity}" }) { item ->
                 var expanded by remember(item.id, item.expanded) { mutableStateOf(item.expanded) }
-                var menuOpen by remember(item.id) { mutableStateOf(false) }
-                V4SheetCard(Modifier.fillMaxWidth(), strongBorder = false) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (expanded) "▾" else "▸",
-                                Modifier.width(22.dp).clickable { expanded = !expanded },
-                                color = MaterialTheme.colorScheme.secondary,
-                            )
-                            Text(
-                                item.name.ifBlank { "Unnamed item" },
-                                Modifier.weight(1f).clickable { expanded = !expanded },
-                                fontWeight = FontWeight.Black,
-                            )
-                            V4QuantityCircle(item.quantity)
-                            Box {
-                                TextButton(
-                                    onClick = { menuOpen = true },
-                                    enabled = controlsEnabled,
-                                    modifier = Modifier.width(42.dp),
-                                    contentPadding = ButtonDefaults.TextButtonContentPadding,
-                                ) { Text("⋮", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black) }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                    DropdownMenuItem(
-                                        text = { Text("Edit") },
-                                        onClick = {
-                                            menuOpen = false
-                                            onEdit(item)
-                                        },
-                                    )
-                                    if (item.id != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-                                            onClick = {
-                                                menuOpen = false
-                                                deleteCandidate = item
-                                            },
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    V4SheetCard(Modifier.weight(1f), strongBorder = false) {
+                        Column(
+                            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    if (expanded) "▾" else "▸",
+                                    Modifier.width(22.dp).clickable { expanded = !expanded },
+                                    color = MaterialTheme.colorScheme.secondary,
+                                )
+                                Text(
+                                    item.name.ifBlank { "Unnamed item" },
+                                    Modifier.weight(1f).pointerInput(item.id, controlsEnabled) {
+                                        detectTapGestures(
+                                            onTap = { expanded = !expanded },
+                                            onDoubleTap = { if (controlsEnabled) onEdit(item) },
                                         )
-                                    }
+                                    },
+                                    fontWeight = FontWeight.Black,
+                                )
+                                if (item.id != null) {
+                                    Text(
+                                        "×",
+                                        modifier = Modifier
+                                            .padding(start = 8.dp)
+                                            .clickable(enabled = controlsEnabled) { deleteCandidate = item },
+                                        color = MaterialTheme.colorScheme.secondary,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Black,
+                                    )
                                 }
                             }
+                            if (expanded && item.description.isNotBlank()) Text(item.description)
                         }
-                        if (expanded && item.description.isNotBlank()) Text(item.description)
                     }
+                    V4InventoryQuantityBox(
+                        quantity = item.quantity,
+                        enabled = controlsEnabled && item.id != null,
+                        onIncrease = {
+                            item.id?.let { id ->
+                                onUpdate(id, item.name, item.description, item.quantity + 1)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -887,14 +856,26 @@ private fun V4EquipmentPage(
 }
 
 @Composable
-private fun V4QuantityCircle(quantity: Int) {
+private fun V4InventoryQuantityBox(quantity: Int, enabled: Boolean, onIncrease: () -> Unit) {
     Surface(
-        modifier = Modifier.size(34.dp),
-        shape = CircleShape,
+        modifier = Modifier.width(48.dp).height(58.dp),
+        shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Box(contentAlignment = Alignment.Center) { Text(quantity.toString(), fontWeight = FontWeight.Black) }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                "+",
+                modifier = Modifier.clickable(enabled = enabled, onClick = onIncrease),
+                color = MaterialTheme.colorScheme.secondary,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black,
+            )
+            Text(quantity.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+        }
     }
 }
 

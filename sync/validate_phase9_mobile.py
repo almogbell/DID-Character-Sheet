@@ -46,8 +46,8 @@ def main() -> None:
         "didHtmlToAnnotatedString(improvement.description)",
         "V4NoteDialog(",
         "v4RenderedNoteText(note)",
-        "V4QuantityCircle",
-        'Text("⋮"',
+        "V4InventoryQuantityBox",
+        '"×"',
         'V4Heading("Inventory"',
         'V4Heading("Notes")',
         'Character("Character"',
@@ -55,6 +55,9 @@ def main() -> None:
         'Notes("Notes"',
         "onRemoveInventoryItem",
         "V4AppNavigationIcon",
+        'snapshot.uiIcons["inventory"]',
+        'snapshot.uiIcons["notes"]',
+        ".scale(1.48f)",
         "onDoubleTap",
         "LaunchedEffect(snapshot.hp.current)",
         "Modifier.size(46.dp, 42.dp)",
@@ -64,6 +67,9 @@ def main() -> None:
         "android/phase8/Phase9CompanionSheetV4.kt",
         'Text("Improvement Points"',
         '"${snapshot.progression.currentIp} IP  •  Level ${snapshot.progression.level}"',
+        'Text("${at.current}/${at.max}"',
+        'Text("⋮"',
+        "V4QuantityCircle",
     )
     require(
         "android/phase8/DidCharacterSnapshot.kt",
@@ -85,6 +91,8 @@ def main() -> None:
         'state["_mobile_ui"]',
         '"agility": os.path.join(app_dir, "icons", "agility.svg")',
         '"dr": os.path.join(app_dir, "icons", "defenses", "dr.svg")',
+        '"inventory": os.path.join(app_dir, "icons", "headers", "inventory.svg")',
+        'os.path.join(app_dir, "icons", "notes", "custom.svg")',
         'action == "identity.set"',
         'action == "inventory.add"',
         'action == "inventory.update"',
@@ -104,7 +112,7 @@ def main() -> None:
     require(
         "android/app/build.gradle.kts",
         "com.caverock:androidsvg-aar:1.4",
-        "versionCode = 12",
+        "versionCode = 13",
     )
     print("Phase 9 mobile parity invariants OK")
 

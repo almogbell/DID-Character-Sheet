@@ -69,7 +69,16 @@ class DesktopSyncAdapter:
             "strength": os.path.join(app_dir, "icons", "strength.svg"),
             "bdv": os.path.join(app_dir, "icons", "defenses", "bdv.svg"),
             "dr": os.path.join(app_dir, "icons", "defenses", "dr.svg"),
+            "inventory": os.path.join(app_dir, "icons", "headers", "inventory.svg"),
         }
+        for candidate in (
+            os.path.join(app_dir, "icons", "notes", "custom.svg"),
+            os.path.join(app_dir, "icons", "headers", "notes.svg"),
+            os.path.join(app_dir, "icons", "notes.svg"),
+        ):
+            if os.path.isfile(candidate):
+                paths["notes"] = candidate
+                break
         result: dict[str, str] = {}
         for key, path in paths.items():
             try:
