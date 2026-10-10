@@ -2,50 +2,42 @@
 
 Run this only after Phase 8 Windows↔Android pairing already works.
 
-## V3 setup
+## Current test setup
 
-1. Close Windows DID.
-2. Replace `mobile_sync_frontend_adapter.py` with the Phase 9 V3 delta version, then restart DID.
-3. Install/update the `DID Phase 9 Test 2` APK.
-4. Reconnect or pair the phone if needed.
+1. Keep the working Phase 9 Windows sync adapter already installed. V5 is Android-only.
+2. Install/update the `DID Phase 9 Test 2` APK.
+3. Reconnect or pair only if Android requires it.
 
-The V3 Windows adapter adds a mobile-only `_mobile_ui.icons` block to snapshots. It reads the actual SVG artwork from the running desktop installation (`icons/*.svg` and `icons/defenses/*.svg`). This data is never written into `.didchar` files.
+The Windows adapter adds a mobile-only `_mobile_ui.icons` block to snapshots. It reads the actual SVG artwork from the running desktop installation (`icons/*.svg` and `icons/defenses/*.svg`). This data is never written into `.didchar` files.
 
-## Visual / interaction checks
+## V5 visual / interaction checks
 
-- HP and Hearts appear together as one resource group.
-- Each Heart uses the desktop four-quarter heart shape.
-- Tapping a Heart quarter changes HP using the same target-value semantics as Windows.
-- Adversity Tokens are gold diamonds and are directly tappable using the same slot semantics as Windows.
-- HP and AT no longer need +/- buttons.
-- BDV and DR use the actual desktop SVG artwork with the current value over the icon.
-- Ability rows use the actual desktop ability SVG artwork and desktop accent colors.
-- No extra `Defense: Agility` subtitle and no duplicated `Defense ability` text.
-- Portrait uses Fit and is not clipped at the left edge.
-- No dedicated Backstory button.
-- Improvement and Empowerment descriptions render DID rich text.
-- Improvement-linked note icons still open the associated note.
-- The linked-note popup renders built-in HTML formatting rather than showing `<b>` / `<br>` markup.
-- Inventory has no item-count badge.
-- Notes has no note-count badge.
-- Inventory quantity is a circular number badge rather than `x1`.
-- Inventory row actions use a three-dot menu instead of a large Edit button.
+- Character name is larger and has no Edit button. Double-tapping the name opens the rename dialog.
+- The portrait gallery uses larger cards and does not mark any image as selected/current.
+- Hearts have no `HP 16/16` heading, are larger, remain four-quarter controls, and update visually immediately when tapped while Windows remains authoritative.
+- Adversity diamonds have no `Adversity Tokens` heading, are larger, remain directly tappable, and update visually immediately when tapped.
+- BDV / DR and ability icons continue using the artwork supplied by the desktop installation.
+- Character / Equipment / Notes use DID-style sheet, inventory-bag, and notes-book symbols rather than placeholder glyphs.
+- The Android launcher has a DID-style app symbol.
+- Inventory has only one destructive path: Delete in the three-dot menu. The Edit dialog no longer repeats Delete.
+- Inventory quantity remains a circular number badge.
+- Improvement-linked notes open with their note color, border/background, pin state, and DID rich-text formatting.
+- Notes page uses the same rich-text rendering and note colors.
 
 ## Bidirectional sync regression
 
 - Change HP on Windows and confirm Android updates.
-- Tap a Heart quarter on Android and confirm Windows HP updates/saves and Android settles on the canonical returned value.
-- Tap Adversity diamonds on Android and confirm Windows matches the same slot semantics.
-- Change IP on Android and confirm Windows updates/saves.
-- Switch active character on Windows and confirm Android follows it, including portrait and lists.
+- Tap Heart quarters on Android and confirm the phone responds immediately, then Windows receives/saves the canonical change.
+- Tap Adversity diamonds on Android and confirm the phone responds immediately, then Windows receives/saves the canonical change.
+- Switch active character on Windows and confirm Android follows it, including all portraits and lists.
 - Disconnect Wi-Fi: Android becomes read-only and does not queue mutations. Reconnect and confirm canonical resync.
 
 ## Phase 9 direct edits
 
-- Rename the character from Android. Confirm Windows updates and saves.
+- Double-tap the character name on Android, rename it, and confirm Windows updates/saves.
 - Add an Inventory item from Android. Confirm it appears on Windows with the same name/description/quantity.
-- Edit that Inventory item from the three-dot menu. Confirm Windows updates.
-- Delete that Inventory item from the three-dot menu. Confirm Windows removes it after confirmation.
+- Edit that Inventory item on Android. Confirm Windows updates.
+- Delete that Inventory item from the three-dot menu. Confirm Windows removes it.
 - Verify a read-only desktop character rejects all mutations.
 
 ## Deliberately deferred
