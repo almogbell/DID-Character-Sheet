@@ -8,6 +8,8 @@ no save files and duplicates no improvement/game rules.
 
 from __future__ import annotations
 
+import base64
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from uuid import uuid4
@@ -45,7 +47,41 @@ class DesktopSyncAdapter:
         character = getattr(self.window, "character", None)
         if character is None:
             return None
-        return self.storage_system.character_to_dict(character)
+
+        state = self.storage_system.character_to_dict(character)
+        if isinstance(state, dict):
+            # The phone should use the exact current desktop artwork instead of
+            # reimplementing or freezing fallback icons in Kotlin. These extra
+            # mobile-only keys never enter the .didchar save format.
+            state["_mobile_ui"] = {
+                "icons": self._load_mobile_svg_assets(),
+            }
+        return state
+
+    def _load_mobile_svg_assets(self) -> dict[str, str]:
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        paths = {
+            "agility": os.path.join(app_dir, "icons", "agility.svg"),
+            "finesse": os.path.join(app_dir, "icons", "finesse.svg"),
+            "instinct": os.path.join(app_dir, "icons", "instinct.svg"),
+            "knowledge": os.path.join(app_dir, "icons", "knowledge.svg"),
+            "presence": os.path.join(app_dir, "icons", "presence.svg"),
+            "strength": os.path.join(app_dir, "icons", "strength.svg"),
+            "bdv": os.path.join(app_dir, "icons", "defenses", "bdv.svg"),
+            "dr": os.path.join(app_dir, "icons", "defenses", "dr.svg"),
+        }
+        result: dict[str, str] = {}
+        for key, path in paths.items():
+            try:
+                with open(path, "rb") as handle:
+                    raw = handle.read()
+                if raw:
+                    result[key] = base64.b64encode(raw).decode("ascii")
+            except (OSError, ValueError):
+                # A missing custom asset should not break synchronization. The
+                # Android UI has a conservative fallback for absent artwork.
+                continue
+        return result
 
     def command_handler(self, action: str, payload: dict, base_revision: int, request_id: str) -> None:
         del base_revision, request_id  # revision validation belongs to MobileSyncServer
@@ -194,8 +230,6 @@ class DesktopSyncAdapter:
                 maximum=self.MAX_BACKSTORY_CHARS,
             )
         else:
-            # Species is improvement-backed in the finished desktop app and is
-            # intentionally not duplicated as a free mobile text mutation.
             raise MobileSyncValidationError(f"Identity field cannot be edited from mobile: {field}")
 
     def _inventory(self) -> Any:
