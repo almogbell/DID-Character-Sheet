@@ -12,17 +12,16 @@ android {
         applicationId = "com.did.charactersheet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 10
+        versionCode = 11
         versionName = "0.8.0"
     }
 
     buildTypes {
         debug {
-            // Phase 9 Test 2 is a one-time package transition. CI now caches the
-            // generated debug keystore, so future test APKs can update this app
-            // normally instead of creating another side-by-side package.
+            // Keep the Phase 9 Test 2 package stable so each feedback build
+            // updates the existing test app instead of creating another icon.
             applicationIdSuffix = ".phase9test2"
-            versionNameSuffix = "-phase9-test2"
+            versionNameSuffix = "-phase9-test2-v4"
         }
 
         release {
