@@ -68,7 +68,7 @@ fun Phase8CompanionRoot(
             onRefresh = onRefresh,
         )
 
-        Phase9CompanionSheetV3(
+        Phase9CompanionSheetV4(
             snapshot = snapshot,
             connected = state.isConnected,
             pending = state.pendingRequestIds.isNotEmpty(),
