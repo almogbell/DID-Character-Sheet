@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.did.charactersheet.ui.DidPalette
+import org.json.JSONObject
 
 /** Companion entry surface. Windows remains the authoritative character. */
 @Composable
@@ -36,11 +37,23 @@ fun Phase8CompanionRoot(
     onHpChange: (Int) -> Unit,
     onAtChange: (Int) -> Unit,
     onIpChange: (Int) -> Unit,
+    onSetHp: (Int) -> Unit,
+    onSetAt: (Int) -> Unit,
     onSetName: (String) -> Unit,
     onSetBackstory: (String) -> Unit,
     onAddInventoryItem: (String, String, Int) -> Unit,
     onUpdateInventoryItem: (String, String, String, Int) -> Unit,
     onRemoveInventoryItem: (String) -> Unit,
+    onAddNote: (String, String, String, Boolean) -> Unit,
+    onUpdateNote: (String, String, String, String, Boolean) -> Unit,
+    onRemoveNote: (String) -> Unit,
+    onPickImages: () -> Unit,
+    onRemoveImage: (String) -> Unit,
+    onEditImprovement: (String, JSONObject, String?, String?) -> Unit,
+    onAdjustResources: (Int, Int, Int) -> Unit,
+    onRollAbility: (String) -> Unit,
+    onRollOtherDice: (Map<Int, Int>) -> Unit,
+    onClearDiceResult: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snapshot = state.snapshot
@@ -62,27 +75,31 @@ fun Phase8CompanionRoot(
     }
 
     Column(modifier.fillMaxSize()) {
-        ConnectionBanner(
+        ConnectionBanner(state, onReconnect, onRefresh)
+        Phase9CompanionSheetV7(
             state = state,
-            onReconnect = onReconnect,
-            onRefresh = onRefresh,
-        )
-
-        Phase9CompanionSheetV4(
-            snapshot = snapshot,
-            connected = state.isConnected,
-            pending = state.pendingRequestIds.isNotEmpty(),
-            onHpChange = onHpChange,
-            onAtChange = onAtChange,
-            onIpChange = onIpChange,
+            onSetHp = onSetHp,
+            onSetAt = onSetAt,
             onSetName = onSetName,
-            onSetBackstory = onSetBackstory,
             onAddInventoryItem = onAddInventoryItem,
             onUpdateInventoryItem = onUpdateInventoryItem,
             onRemoveInventoryItem = onRemoveInventoryItem,
+            onAddNote = onAddNote,
+            onUpdateNote = onUpdateNote,
+            onRemoveNote = onRemoveNote,
+            onPickImages = onPickImages,
+            onRemoveImage = onRemoveImage,
+            onEditImprovement = onEditImprovement,
+            onAdjustResources = onAdjustResources,
+            onRollAbility = onRollAbility,
+            onRollOtherDice = onRollOtherDice,
+            onClearDiceResult = onClearDiceResult,
             modifier = Modifier.weight(1f),
         )
     }
+
+    @Suppress("UNUSED_VARIABLE")
+    val retainedBackstory = onSetBackstory
 }
 
 @Composable
@@ -103,13 +120,10 @@ private fun ConnectionBanner(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Box(
-                Modifier
-                    .padding(end = 9.dp)
-                    .size(10.dp)
-                    .background(
-                        if (state.isConnected) DidPalette.Positive else DidPalette.Negative,
-                        CircleShape,
-                    )
+                Modifier.padding(end = 9.dp).size(10.dp).background(
+                    if (state.isConnected) DidPalette.Positive else DidPalette.Negative,
+                    CircleShape,
+                )
             )
             Column(Modifier.weight(1f)) {
                 Text(
@@ -126,22 +140,14 @@ private fun ConnectionBanner(
                     )
                 }
                 if (state.reconnectingAutomatically) {
-                    Text(
-                        "Reconnecting automatically…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.secondary,
-                    )
+                    Text("Reconnecting automatically…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
                 }
                 state.lastError?.takeIf { !state.isConnected }?.let {
                     Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                 }
             }
-
-            if (state.isConnected) {
-                OutlinedButton(onClick = onRefresh) { Text("Refresh") }
-            } else {
-                Button(onClick = onReconnect) { Text("Reconnect") }
-            }
+            if (state.isConnected) OutlinedButton(onClick = onRefresh) { Text("Refresh") }
+            else Button(onClick = onReconnect) { Text("Reconnect") }
         }
     }
 }
