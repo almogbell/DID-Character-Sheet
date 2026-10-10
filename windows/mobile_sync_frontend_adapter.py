@@ -102,7 +102,10 @@ class DesktopSyncAdapter:
         # finished desktop adapter remains readable and the desktop model stays
         # authoritative. Dice is read-only; other V7 actions use the same
         # validate/autosave/refresh path as existing mobile edits.
-        from mobile_sync_v7 import handle_mobile_v7_action
+        try:
+            from .mobile_sync_v7 import handle_mobile_v7_action
+        except ImportError:
+            from mobile_sync_v7 import handle_mobile_v7_action
         v7 = handle_mobile_v7_action(self, action, payload)
         if v7.handled:
             if v7.mutated:
