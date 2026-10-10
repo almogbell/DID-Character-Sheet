@@ -19,47 +19,38 @@ def main() -> None:
     )
     require(
         "android/phase8/Phase8CompanionRoot.kt",
-        "Phase9CompanionSheetV2(",
+        "Phase9CompanionSheetV3(",
         "onSetName = onSetName",
         "onAddInventoryItem = onAddInventoryItem",
     )
     require(
-        "android/phase8/Phase9CompanionSheetV2.kt",
-        "Phase9V2Heart(",
-        "DefenseBadgeKind.BDV",
-        "DefenseBadgeKind.DR",
-        "Phase9V2Adversity",
+        "android/phase8/Phase9CompanionSheetV3.kt",
+        "V3Hearts(",
+        "onQuarterTap",
+        "V3Adversity(",
+        "index < at.current",
+        "V3DesktopSvg",
+        'snapshot.uiIcons["dr"]',
+        'snapshot.uiIcons[stat.key]',
         "ContentScale.Fit",
-        "phase9V2AbilityColors",
-        "Phase9V2AbilityEmblem",
-        "didRichText(improvement.description)",
-        "didRichText(empowerment.description)",
-        "phase9V2LinkedNotes",
-        "Phase9V2NoteIcon",
+        "didHtmlToAnnotatedString(improvement.description)",
+        "didHtmlToAnnotatedString(note.text.text)",
+        "V3QuantityCircle",
+        'Text("⋮"',
+        'V3Heading("Inventory"',
+        'V3Heading("Notes")',
         'Character("Character"',
         'Equipment("Equipment"',
         'Notes("Notes"',
-        "Phase9V2InventoryEditDialog",
-        "onSetName",
-        "onAddInventoryItem",
-        "onUpdateInventoryItem",
         "onRemoveInventoryItem",
     )
     require(
-        "android/phase8/DidRichText.kt",
-        "DID_RICH_NOTE_MARKER",
-        "Html.fromHtml",
-        "AnnotatedString",
-        "UnderlineSpan",
-        "Typeface.BOLD_ITALIC",
-    )
-    require(
         "android/phase8/DidCharacterSnapshot.kt",
-        "RICH_NOTE_MARKER",
+        "uiIcons: Map<String, String>",
+        'optJSONObject("_mobile_ui")',
+        "didHtmlToAnnotatedString",
         "Html.fromHtml",
         "AnnotatedString",
-        "UnderlineSpan",
-        "Typeface.BOLD_ITALIC",
     )
     require(
         "android/phase8/DidCompanionViewModel.kt",
@@ -70,11 +61,18 @@ def main() -> None:
     )
     require(
         "windows/mobile_sync_frontend_adapter.py",
+        'state["_mobile_ui"]',
+        '"agility": os.path.join(app_dir, "icons", "agility.svg")',
+        '"dr": os.path.join(app_dir, "icons", "defenses", "dr.svg")',
         'action == "identity.set"',
         'action == "inventory.add"',
         'action == "inventory.update"',
         'action == "inventory.remove"',
         "mark_dirty(auto_save=True)",
+    )
+    require(
+        "android/app/build.gradle.kts",
+        "com.caverock:androidsvg-aar:1.4",
     )
     print("Phase 9 mobile parity invariants OK")
 
