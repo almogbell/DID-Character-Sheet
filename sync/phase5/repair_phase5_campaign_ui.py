@@ -31,6 +31,22 @@ def replace_once(text, needle, replacement, label):
 
 def main():
     root = find_project_root()
+    support_dir = Path(__file__).resolve().parent
+
+    # The UI imports CampaignSessionService. If the original Phase 5 installer
+    # stopped before copying support files, repair that first so the app can
+    # import campaign_ui.py again.
+    session_source = support_dir / "campaign_session.py"
+    session_target = root / "campaign_session.py"
+    if not session_target.is_file():
+        if not session_source.is_file():
+            raise FileNotFoundError(
+                "campaign_session.py is missing from the Phase 5 folder. "
+                "Download the latest Phase 5 ZIP again."
+            )
+        shutil.copy2(session_source, session_target)
+        print("campaign_session.py restored.")
+
     path = root / "campaign_ui.py"
     original = path.read_text(encoding="utf-8")
     text = original
@@ -196,6 +212,7 @@ def main():
     else:
         print("campaign_ui.py already contains the Phase 5 checkbox code.")
 
+    py_compile.compile(str(session_target), doraise=True)
     py_compile.compile(str(path), doraise=True)
     print("Compile: PASS")
     print("Close every running DID window, then restart frontend_2_8.py.")
