@@ -92,11 +92,23 @@ class DesktopSyncAdapter:
                 continue
         return result
 
-    def command_handler(self, action: str, payload: dict, base_revision: int, request_id: str) -> None:
+    def command_handler(self, action: str, payload: dict, base_revision: int, request_id: str) -> Optional[dict]:
         del base_revision, request_id  # revision validation belongs to MobileSyncServer
         self._ensure_editable()
         if not isinstance(payload, dict):
             raise MobileSyncValidationError("Command payload must be an object")
+
+        # V7 actions are kept in a small companion module so the existing
+        # finished desktop adapter remains readable and the desktop model stays
+        # authoritative. Dice is read-only; other V7 actions use the same
+        # validate/autosave/refresh path as existing mobile edits.
+        from mobile_sync_v7 import handle_mobile_v7_action
+        v7 = handle_mobile_v7_action(self, action, payload)
+        if v7.handled:
+            if v7.mutated:
+                self._validate_character()
+                self._persist_and_refresh()
+            return v7.result
 
         if action == "resource.change":
             self._handle_resource_change(payload)
@@ -113,6 +125,7 @@ class DesktopSyncAdapter:
 
         self._validate_character()
         self._persist_and_refresh()
+        return None
 
     # ------------------------------------------------------------------
     # Shared validation helpers

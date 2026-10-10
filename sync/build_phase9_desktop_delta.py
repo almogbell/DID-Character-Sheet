@@ -9,21 +9,26 @@ WINDOWS = ROOT / "windows"
 
 FILES = (
     "mobile_sync_frontend_adapter.py",
+    "mobile_sync_server.py",
+    "mobile_sync_v7.py",
 )
 
-README = """DID Character Sheet - Phase 9 desktop delta
+README = """DID Character Sheet - Phase 9 V7 desktop delta
 
-Use this only after the Phase 8 Windows companion is already working.
+Use this after the Phase 8 Windows companion is already installed and working.
 
 1. Close the Windows DID app.
-2. Replace mobile_sync_frontend_adapter.py in the same current-code test folder
-   with the file from this ZIP.
-3. Start DID normally. You do NOT need to patch frontend_2_8.py again.
+2. Copy all three Python files from this ZIP into the same current-code folder:
+   mobile_sync_frontend_adapter.py
+   mobile_sync_server.py
+   mobile_sync_v7.py
+3. Replace the older files when Windows asks.
+4. Start DID normally. You do NOT need to patch frontend_2_8.py again.
 
-This adds authoritative mobile commands for ordinary character name/backstory
-text and Inventory add/edit/delete. Windows still validates, autosaves and
-broadcasts the canonical state. Improvement/species/note rules are not copied
-into Android.
+V7 adds authoritative absolute HP/AT updates, resource adjustment, ordinary note
+editing, character-picture add/remove, safe Improvement choice/custom editing,
+and Windows-authoritative dice results. It also raises the authenticated message
+limit only so selected character pictures can be transferred from the paired phone.
 """
 
 
