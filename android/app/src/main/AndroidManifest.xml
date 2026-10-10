@@ -4,7 +4,7 @@
 
     <application
         android:allowBackup="true"
-        android:label="DID Character Sheet"
+        android:label="DID Phase 9 Test 2"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
