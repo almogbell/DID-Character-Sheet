@@ -50,6 +50,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -150,12 +151,7 @@ fun Phase9CompanionSheetV4(
                 addingInventory = false
                 inventoryEdit = null
             },
-            onRemove = inventoryEdit?.id?.let { id ->
-                {
-                    onRemoveInventoryItem(id)
-                    inventoryEdit = null
-                }
-            },
+            onRemove = null,
         )
     }
 
@@ -165,8 +161,8 @@ fun Phase9CompanionSheetV4(
     val retainedCommands = onSetBackstory to onIpChange
 }
 
-private enum class V4Page(val label: String, val symbol: String) {
-    Character("Character", "◆"), Equipment("Equipment", "▣"), Notes("Notes", "✎")
+private enum class V4Page(val label: String) {
+    Character("Character"), Equipment("Equipment"), Notes("Notes")
 }
 
 @Composable
@@ -181,7 +177,7 @@ private fun V4BottomNavigation(page: V4Page, onPage: (V4Page) -> Unit) {
                 NavigationBarItem(
                     selected = page == item,
                     onClick = { onPage(item) },
-                    icon = { Text(item.symbol, fontWeight = FontWeight.Black) },
+                    icon = { V4AppNavigationIcon(item, selected = page == item) },
                     label = { Text(item.label) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -191,6 +187,79 @@ private fun V4BottomNavigation(page: V4Page, onPage: (V4Page) -> Unit) {
                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun V4AppNavigationIcon(page: V4Page, selected: Boolean) {
+    val color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    Canvas(Modifier.size(28.dp)) {
+        val stroke = Stroke(width = 2.0f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        val w = size.width
+        val h = size.height
+        when (page) {
+            V4Page.Character -> {
+                val points = listOf(
+                    Offset(w * .50f, h * .14f), Offset(w * .548f, h * .384f),
+                    Offset(w * .755f, h * .245f), Offset(w * .616f, h * .452f),
+                    Offset(w * .86f, h * .50f), Offset(w * .616f, h * .548f),
+                    Offset(w * .755f, h * .755f), Offset(w * .548f, h * .616f),
+                    Offset(w * .50f, h * .86f), Offset(w * .452f, h * .616f),
+                    Offset(w * .245f, h * .755f), Offset(w * .384f, h * .548f),
+                    Offset(w * .14f, h * .50f), Offset(w * .384f, h * .452f),
+                    Offset(w * .245f, h * .245f), Offset(w * .452f, h * .384f),
+                )
+                val path = Path().apply {
+                    moveTo(points.first().x, points.first().y)
+                    points.drop(1).forEach { lineTo(it.x, it.y) }
+                    close()
+                }
+                drawPath(path, color, style = stroke)
+                drawCircle(color, radius = w * .045f, center = Offset(w / 2f, h / 2f), style = stroke)
+            }
+            V4Page.Equipment -> {
+                val bag = Path().apply {
+                    moveTo(w * .24f, h * .40f)
+                    quadraticBezierTo(w * .24f, h * .34f, w * .32f, h * .34f)
+                    lineTo(w * .68f, h * .34f)
+                    quadraticBezierTo(w * .76f, h * .34f, w * .76f, h * .40f)
+                    lineTo(w * .76f, h * .78f)
+                    quadraticBezierTo(w * .76f, h * .82f, w * .70f, h * .82f)
+                    lineTo(w * .30f, h * .82f)
+                    quadraticBezierTo(w * .24f, h * .82f, w * .24f, h * .78f)
+                    close()
+                }
+                drawPath(bag, color, style = stroke)
+                val handle = Path().apply {
+                    moveTo(w * .34f, h * .38f)
+                    cubicTo(w * .36f, h * .12f, w * .64f, h * .12f, w * .66f, h * .38f)
+                }
+                drawPath(handle, color, style = stroke)
+                drawLine(color, Offset(w * .39f, h * .29f), Offset(w * .61f, h * .29f), strokeWidth = 2f)
+            }
+            V4Page.Notes -> {
+                val left = Path().apply {
+                    moveTo(w * .12f, h * .25f)
+                    quadraticBezierTo(w * .30f, h * .17f, w * .48f, h * .29f)
+                    lineTo(w * .48f, h * .78f)
+                    quadraticBezierTo(w * .30f, h * .67f, w * .12f, h * .74f)
+                    close()
+                }
+                val right = Path().apply {
+                    moveTo(w * .52f, h * .29f)
+                    quadraticBezierTo(w * .70f, h * .17f, w * .88f, h * .25f)
+                    lineTo(w * .88f, h * .74f)
+                    quadraticBezierTo(w * .70f, h * .67f, w * .52f, h * .78f)
+                    close()
+                }
+                drawPath(left, color, style = stroke)
+                drawPath(right, color, style = stroke)
+                drawLine(color, Offset(w * .50f, h * .29f), Offset(w * .50f, h * .79f), strokeWidth = 2f)
+                drawLine(color, Offset(w * .20f, h * .39f), Offset(w * .40f, h * .42f), strokeWidth = 1.6f)
+                drawLine(color, Offset(w * .60f, h * .42f), Offset(w * .80f, h * .39f), strokeWidth = 1.6f)
             }
         }
     }
@@ -231,46 +300,40 @@ private fun V4CharacterPage(
 
 @Composable
 private fun V4NameHeader(snapshot: DidCharacterSnapshot, canEdit: Boolean, onEditName: () -> Unit) {
-    Box(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp),
-        contentAlignment = Alignment.Center,
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(horizontal = 62.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+        Text(
+            snapshot.name.ifBlank { "Unnamed Character" },
+            modifier = Modifier.pointerInput(canEdit) {
+                detectTapGestures(onDoubleTap = { if (canEdit) onEditName() })
+            },
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Black,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (snapshot.speciesName.isNotBlank()) {
             Text(
-                snapshot.name.ifBlank { "Unnamed Character" },
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Black,
+                snapshot.speciesName,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                textAlign = TextAlign.Center,
+            )
+        }
+        if (snapshot.backstory.isNotBlank()) {
+            Text(
+                snapshot.backstory,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (snapshot.speciesName.isNotBlank()) {
-                Text(
-                    snapshot.speciesName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            if (snapshot.backstory.isNotBlank()) {
-                Text(
-                    snapshot.backstory,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
         }
-        TextButton(
-            onClick = onEditName,
-            enabled = canEdit,
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) { Text("Edit") }
     }
 }
 
@@ -290,25 +353,21 @@ private fun V4PortraitGallery(snapshot: DidCharacterSnapshot) {
             return@V4SheetCard
         }
         LazyRow(
-            modifier = Modifier.fillMaxWidth().height(132.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(9.dp, Alignment.CenterHorizontally),
+            modifier = Modifier.fillMaxWidth().height(184.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             items(snapshot.portrait.images.indices.toList()) { index ->
                 val image = snapshot.portrait.images[index]
                 val bitmap = remember(image.data) { image.data.v4DecodeBitmap() }
                 Surface(
-                    modifier = Modifier.size(94.dp, 114.dp),
+                    modifier = Modifier.size(132.dp, 164.dp),
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(
-                        if (index == snapshot.portrait.currentIndex) 2.5.dp else 1.dp,
-                        if (index == snapshot.portrait.currentIndex) MaterialTheme.colorScheme.secondary
-                        else MaterialTheme.colorScheme.outlineVariant,
-                    ),
+                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.outlineVariant),
                 ) {
-                    Box(Modifier.fillMaxSize().padding(3.dp), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
                         if (bitmap != null) {
                             Image(
                                 bitmap = bitmap.asImageBitmap(),
@@ -338,25 +397,43 @@ private fun V4ResourcePanel(
     onHpChange: (Int) -> Unit,
     onAtChange: (Int) -> Unit,
 ) {
+    var shownHp by remember(snapshot.id) { mutableIntStateOf(snapshot.hp.current) }
+    var shownAt by remember(snapshot.id) { mutableIntStateOf(snapshot.adversity.current) }
+    LaunchedEffect(snapshot.hp.current) { shownHp = snapshot.hp.current }
+    LaunchedEffect(snapshot.adversity.current) { shownAt = snapshot.adversity.current }
+
     V4SheetCard(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp), strongBorder = true) {
-        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "HP  ${snapshot.hp.current} / ${snapshot.hp.max}",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Black,
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    V4Hearts(snapshot.hp, enabled, onHpChange)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    V4Hearts(
+                        snapshot.hp.copy(current = shownHp),
+                        enabled,
+                    ) { delta ->
+                        val next = (shownHp + delta).coerceIn(0, snapshot.hp.max)
+                        val actual = next - shownHp
+                        if (actual != 0) {
+                            shownHp = next
+                            onHpChange(actual)
+                        }
+                    }
                 }
                 V4DefenseBadge("BDV", snapshot.bdv, snapshot.uiIcons["bdv"])
                 Spacer(Modifier.width(4.dp))
                 V4DefenseBadge("DR", snapshot.dr, snapshot.uiIcons["dr"])
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Text("Adversity Tokens", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Black)
-            V4Adversity(snapshot.adversity, enabled, onAtChange)
+            V4Adversity(
+                snapshot.adversity.copy(current = shownAt),
+                enabled,
+            ) { delta ->
+                val next = (shownAt + delta).coerceIn(0, snapshot.adversity.max)
+                val actual = next - shownAt
+                if (actual != 0) {
+                    shownAt = next
+                    onAtChange(actual)
+                }
+            }
         }
     }
 }
@@ -392,7 +469,7 @@ private fun V4Heart(
     val fill = if (isSystemInDarkTheme()) Color(0xFFB33A42) else Color(0xFFFF0000)
     val empty = if (isSystemInDarkTheme()) Color(0xFF18232E) else Color.White
     val locked = if (isSystemInDarkTheme()) Color(0xFF33414C) else Color(0xFFDDDDDD)
-    val modifier = Modifier.size(36.dp, 33.dp).then(
+    val modifier = Modifier.size(46.dp, 42.dp).then(
         if (enabled) Modifier.pointerInput(availableQuarters) {
             detectTapGestures { pos ->
                 val quarter = if (pos.y < size.height * 0.42f) {
@@ -445,7 +522,7 @@ private fun V4Adversity(at: AdversitySnapshot, enabled: Boolean, onAtChange: (In
         repeat(at.max.coerceAtLeast(0)) { index ->
             val filled = index < at.current
             Canvas(
-                Modifier.size(23.dp).then(
+                Modifier.size(31.dp).then(
                     if (enabled) Modifier.clickable {
                         val target = if (index < at.current) index else index + 1
                         val delta = target - at.current

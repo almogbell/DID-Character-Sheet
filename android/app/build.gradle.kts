@@ -12,7 +12,7 @@ android {
         applicationId = "com.did.charactersheet"
         minSdk = 24
         targetSdk = 35
-        versionCode = 11
+        versionCode = 12
         versionName = "0.8.0"
     }
 
@@ -21,7 +21,7 @@ android {
             // Keep the Phase 9 Test 2 package stable so each feedback build
             // updates the existing test app instead of creating another icon.
             applicationIdSuffix = ".phase9test2"
-            versionNameSuffix = "-phase9-test2-v4"
+            versionNameSuffix = "-phase9-test2-v5"
         }
 
         release {

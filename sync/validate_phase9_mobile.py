@@ -54,6 +54,11 @@ def main() -> None:
         'Equipment("Equipment"',
         'Notes("Notes"',
         "onRemoveInventoryItem",
+        "V4AppNavigationIcon",
+        "onDoubleTap",
+        "LaunchedEffect(snapshot.hp.current)",
+        "Modifier.size(46.dp, 42.dp)",
+        "Modifier.size(31.dp)",
     )
     forbid(
         "android/phase8/Phase9CompanionSheetV4.kt",
@@ -87,9 +92,19 @@ def main() -> None:
         "mark_dirty(auto_save=True)",
     )
     require(
+        "android/app/src/main/AndroidManifest.xml",
+        'android:icon="@drawable/did_app_icon"',
+        'android:roundIcon="@drawable/did_app_icon"',
+    )
+    require(
+        "android/app/src/main/res/drawable/did_app_icon.xml",
+        "#A87824",
+        "#2F5F91",
+    )
+    require(
         "android/app/build.gradle.kts",
         "com.caverock:androidsvg-aar:1.4",
-        "versionCode = 11",
+        "versionCode = 12",
     )
     print("Phase 9 mobile parity invariants OK")
 

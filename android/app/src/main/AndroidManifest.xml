@@ -4,6 +4,8 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@drawable/did_app_icon"
+        android:roundIcon="@drawable/did_app_icon"
         android:label="DID Phase 9 Test 2"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"

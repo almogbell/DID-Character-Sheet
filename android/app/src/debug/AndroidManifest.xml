@@ -2,6 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <application
-        android:label="DID Phase 9 Test"
+        android:label="DID Phase 9 Test 2"
         tools:replace="android:label" />
 </manifest>
