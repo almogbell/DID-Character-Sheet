@@ -26,17 +26,30 @@ def repair_support_file():
     if FIXED_SUBTITLE in text:
         return False
     if BROKEN_SUBTITLE not in text:
-        raise RuntimeError(
-            "Could not safely repair campaign_role_ui.py. Download the latest Phase 7 ZIP again."
-        )
+        # A later repair may already have replaced the affected block.
+        return False
     role_ui.write_text(text.replace(BROKEN_SUBTITLE, FIXED_SUBTITLE, 1), encoding="utf-8")
     return True
 
 
 def main():
+    support = Path(__file__).resolve().parent
+
     changed = repair_support_file()
-    print("Phase 7 preflight UI repair: PASS" if changed else "Phase 7 preflight UI repair: already fixed")
-    installer = Path(__file__).resolve().parent / "install_phase7.py"
+    print(
+        "Phase 7 preflight syntax repair: PASS"
+        if changed
+        else "Phase 7 preflight syntax repair: already fixed"
+    )
+
+    regression_repair = support / "repair_phase7_regressions.py"
+    if not regression_repair.is_file():
+        raise FileNotFoundError(
+            "repair_phase7_regressions.py is missing. Download the latest Phase 7 ZIP again."
+        )
+    runpy.run_path(str(regression_repair), run_name="__main__")
+
+    installer = support / "install_phase7.py"
     runpy.run_path(str(installer), run_name="__main__")
 
 
