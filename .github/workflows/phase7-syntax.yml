@@ -13,6 +13,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Apply packaged preflight repair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('sync/phase7/campaign_role_ui.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''            subtitle = QLabel(
+              " • ".join(x for x in (str(state.get("species") or ""), f"Level {int(state.get('level') or 1)}") if state else "") if x)
+          )
+'''
+          # Match the actual indentation in the packaged source.
+          old = '''            subtitle = QLabel(
+                " • ".join(x for x in (str(state.get("species") or ""), f"Level {int(state.get('level') or 1)}") if state else "") if x)
+            )
+'''
+          new = '''            subtitle_parts = []
+            if state:
+                species = str(state.get("species") or "").strip()
+                if species:
+                    subtitle_parts.append(species)
+                subtitle_parts.append(f"Level {int(state.get('level') or 1)}")
+            subtitle = QLabel(" • ".join(subtitle_parts))
+'''
+          if old not in text:
+              raise SystemExit('preflight repair target not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Python syntax
         run: python -m py_compile sync/phase7/*.py
       - name: JavaScript syntax
