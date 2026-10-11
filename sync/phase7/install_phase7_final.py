@@ -33,6 +33,9 @@ def main():
     print("\nPhase 7 UI repair v4...")
     runpy.run_path(str(here / "repair_phase7_ui_v4.py"), run_name="__main__")
 
+    print("\nPhase 7 UI repair v5...")
+    runpy.run_path(str(here / "repair_phase7_ui_v5.py"), run_name="__main__")
+
     print("\nPHASE 7 FINAL INSTALL: PASS")
     print("Restart with: python frontend_2_8.py")
 
