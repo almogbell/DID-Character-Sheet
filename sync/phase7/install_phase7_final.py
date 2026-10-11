@@ -13,8 +13,6 @@ def main():
     runpy.run_path(str(here / "repair_phase7_packaged.py"), run_name="__main__")
 
     # Re-running Phase 7 after a partial or successful install must be safe.
-    # Earlier installers expected the original single Campaign menu block and
-    # failed once Campaign Manager / My Campaigns had already been added.
     print("\nPhase 7 installer idempotency preflight...")
     runpy.run_path(
         str(here / "repair_phase7_installer_idempotency.py"),
@@ -33,8 +31,10 @@ def main():
     print("\nPhase 7 UI repair v4...")
     runpy.run_path(str(here / "repair_phase7_ui_v4.py"), run_name="__main__")
 
-    print("\nPhase 7 UI repair v5...")
-    runpy.run_path(str(here / "repair_phase7_ui_v5.py"), run_name="__main__")
+    # v5 made the visual sizing worse. Explicitly restore the exact UI state
+    # from immediately before v5, while keeping the functional crash guards.
+    print("\nRestoring pre-v5 UI...")
+    runpy.run_path(str(here / "restore_phase7_ui_v4.py"), run_name="__main__")
 
     print("\nPHASE 7 FINAL INSTALL: PASS")
     print("Restart with: python frontend_2_8.py")
