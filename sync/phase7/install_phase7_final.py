@@ -9,10 +9,17 @@ def main():
 
     # campaign_role_ui.py in the packaged Phase 7 source needs one small
     # preflight syntax repair before install_phase7.py copies/compiles it.
-    # Running the base installer first leaves the project copy with the same
-    # syntax error, so this step must come first.
     print("Phase 7 packaged UI preflight...")
     runpy.run_path(str(here / "repair_phase7_packaged.py"), run_name="__main__")
+
+    # Re-running Phase 7 after a partial or successful install must be safe.
+    # Earlier installers expected the original single Campaign menu block and
+    # failed once Campaign Manager / My Campaigns had already been added.
+    print("\nPhase 7 installer idempotency preflight...")
+    runpy.run_path(
+        str(here / "repair_phase7_installer_idempotency.py"),
+        run_name="__main__",
+    )
 
     print("\nPhase 7 base install...")
     runpy.run_path(str(here / "install_phase7.py"), run_name="__main__")
