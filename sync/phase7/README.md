@@ -30,11 +30,13 @@ The new **Party Dashboard** is visible to campaign members through a one-time br
 ## Install
 
 1. Keep the whole `phase7` folder together inside your current code folder.
-2. Run:
+2. Run the final installer:
 
 ```bat
-python phase7\install_phase7.py
+python phase7\install_phase7_final.py
 ```
+
+The final installer applies a packaged UI preflight repair first, then runs the normal Phase 7 installer, Python compilation checks and local Phase 7 tests.
 
 3. In Supabase SQL Editor run the full contents of:
 
