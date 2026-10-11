@@ -87,12 +87,27 @@ grant insert (campaign_character_id, campaign_id, state) on public.party_charact
 grant update (state) on public.party_character_state to authenticated;
 grant delete on public.party_character_state to authenticated;
 
--- Keep updated_at reliable on upsert.
+-- Keep updated_at reliable on upsert. Define the trigger function here rather
+-- than relying on a helper from an earlier migration.
+create or replace function private.did_party_touch_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+    new.updated_at := now();
+    return new;
+end;
+$$;
+
+revoke all on function private.did_party_touch_updated_at() from public, anon;
+grant execute on function private.did_party_touch_updated_at() to authenticated;
+
 drop trigger if exists did_party_state_touch_updated_at on public.party_character_state;
 create trigger did_party_state_touch_updated_at
 before update on public.party_character_state
 for each row
-execute function private.did_touch_updated_at();
+execute function private.did_party_touch_updated_at();
 
 -- ============================================================
 -- DM removes a character from the live campaign roster.
@@ -159,7 +174,7 @@ grant execute on function public.did_remove_campaign_character(uuid) to authenti
 
 -- ============================================================
 -- One-time Party Dashboard pairing.
--- Any campaign member can open the shared dashboard.  The browser receives
+-- Any campaign member can open the shared dashboard. The browser receives
 -- only a normal player membership, never DM privileges.
 -- ============================================================
 
