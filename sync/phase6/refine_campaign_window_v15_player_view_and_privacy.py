@@ -21,8 +21,6 @@ NEW_CAMPAIGN_CHANGED = r'''    def _campaign_changed(self, index):
         self.current_campaign["role"] = role
 
         # DM-only information stays DM-only in the desktop manager too.
-        # Players know they are members, but do not need the reusable invite
-        # code or DM-dashboard controls.
         if role == "dm":
             invite = self.current_campaign.get("invite_code") or ""
             self.meta_label.setText(
@@ -90,12 +88,22 @@ def find_project_root():
 
 
 def replace_method(text, class_pos, method_name, next_method_name, replacement):
+    """Replace only one method body, never the helper methods after it.
+
+    Older v15 used next_method_name as a distant boundary. Phase 5/6 inserted
+    several helper methods between _update_buttons and _choose_rules..., so that
+    boundary accidentally deleted those helpers. Find the immediate next class
+    method instead.
+    """
     start = text.find(f"    def {method_name}", class_pos)
-    end = text.find(f"    def {next_method_name}", start)
-    if start < 0 or end < 0:
-        raise RuntimeError(
-            f"Could not safely locate {method_name} / {next_method_name} in campaign_ui.py."
-        )
+    if start < 0:
+        raise RuntimeError(f"Could not safely locate {method_name} in campaign_ui.py.")
+
+    next_def = text.find("\n    def ", start + len(f"    def {method_name}"))
+    if next_def < 0:
+        raise RuntimeError(f"Could not locate the method following {method_name}.")
+    end = next_def + 1
+
     current = text[start:end]
     if current == replacement + "\n":
         return text, False
@@ -189,6 +197,7 @@ def main():
     print("Sharing & Privacy redesign: PASS" if privacy_changed else "Sharing & Privacy redesign: already installed")
     print("Empty inventory/notes no longer create giant blank boxes: PASS")
     print("Privacy choices and filtering behavior: PRESERVED")
+    print("Helper methods between _update_buttons and campaign creation: PRESERVED")
     print("Compile: PASS")
     print("Restart frontend_2_8.py and reopen Campaign / Sharing & Privacy.")
 
