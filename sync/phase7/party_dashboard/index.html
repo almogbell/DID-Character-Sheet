@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DID Party Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">DID CHARACTER SHEET</div>
+        <h1>Party Dashboard</h1>
+        <p>Only information each player chose to share with the party appears here.</p>
+      </div>
+      <span id="connectionBadge" class="status-badge neutral">Connecting…</span>
+    </header>
+
+    <section id="claimPanel" class="claim-card hidden">
+      <h2>Connect to a campaign</h2>
+      <p>Open the Party Dashboard from DID, or enter the one-time code shown by the app.</p>
+      <div class="claim-row">
+        <input id="claimCode" autocomplete="off" spellcheck="false" placeholder="Party Dashboard code">
+        <button id="claimBtn">Connect</button>
+      </div>
+      <div id="claimError" class="error-text"></div>
+    </section>
+
+    <section id="dashboardContent" class="hidden">
+      <div class="campaign-bar">
+        <div>
+          <div class="eyebrow">CAMPAIGN</div>
+          <h2 id="campaignTitle">Campaign</h2>
+        </div>
+        <div class="campaign-actions">
+          <select id="campaignSelect"></select>
+          <button id="refreshBtn">Refresh</button>
+        </div>
+      </div>
+
+      <div id="partySummary" class="summary-text"></div>
+      <section id="partyGrid" class="party-grid"></section>
+    </section>
+  </main>
+
+  <dialog id="characterDialog">
+    <button id="dialogClose" class="dialog-close" aria-label="Close">×</button>
+    <div id="characterDialogBody"></div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
