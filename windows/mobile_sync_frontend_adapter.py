@@ -91,11 +91,7 @@ class DesktopSyncAdapter:
             return None
 
     def _find_improvement_icon_path(self, improvement: Any, display_name: str = "") -> str | None:
-        """Mirror the desktop improvement-icon matching rules.
-
-        This deliberately runs on Windows so Android never has to know catalog
-        naming conventions or custom-icon rules.
-        """
+        """Mirror the desktop improvement-icon matching rules on Windows."""
         app_dir = os.path.dirname(os.path.abspath(__file__))
         icon_dir = os.path.join(app_dir, "icons", "improvements")
         if not os.path.isdir(icon_dir):
@@ -240,6 +236,11 @@ class DesktopSyncAdapter:
             else:
                 note["_mobile_display_color"] = self._NOTE_COLORS.get(raw.lower(), self._NOTE_COLORS["yellow"])
 
+            title = str(note.get("title") or "").strip().lower()
+            linked = bool(str(note.get("linked_improvement_id") or "").strip())
+            system = title in {"spellcasting verbs", "sneak attack"} or (title == "animal buddy" and linked)
+            note["_mobile_editable"] = not (linked or system)
+
     def _mobile_ability_options(self) -> dict[str, list[dict]]:
         result: dict[str, list[dict]] = {}
         provider = getattr(self.window, "_available_roll_modifier_options", None)
@@ -262,6 +263,16 @@ class DesktopSyncAdapter:
             except Exception:
                 result[stat_key] = []
         return result
+
+    def _frontend_presentation_globals(self) -> dict:
+        """Read the exact constants used by the live desktop frontend."""
+        for name in ("open_dice_options_for_stat", "show_character_page", "refresh_ui"):
+            method = getattr(self.window, name, None)
+            function = getattr(method, "__func__", method)
+            namespace = getattr(function, "__globals__", None)
+            if isinstance(namespace, dict):
+                return namespace
+        return {}
 
     def _load_mobile_assets(self) -> dict[str, str]:
         """Return desktop-owned artwork/help used by the Android presentation."""
@@ -305,19 +316,26 @@ class DesktopSyncAdapter:
             if encoded:
                 result[key] = encoded
 
-        # Prefer the exact presentation metadata already attached to the live
-        # desktop rows. This keeps Android hover help and ability colors in sync
-        # with the finished Windows UI instead of duplicating them in Kotlin.
+        namespace = self._frontend_presentation_globals()
+        ability_accents = namespace.get("ABILITY_ACCENTS", {})
+        ability_descriptions = namespace.get("ABILITY_DESCRIPTIONS", {})
         rows = getattr(self.window, "stat_rows", {}) or {}
         stats = getattr(self._character(), "stats", None)
+
         for stat_key in ("agility", "finesse", "instinct", "knowledge", "presence", "strength"):
             row = rows.get(stat_key) if isinstance(rows, dict) else None
             help_text = getattr(row, "_ability_tooltip_text", None) if row is not None else None
             accent = getattr(row, "_ability_tooltip_accent", None) if row is not None else None
+
+            if not isinstance(help_text, str) or not help_text.strip():
+                help_text = ability_descriptions.get(stat_key) if isinstance(ability_descriptions, dict) else None
+            if not accent:
+                accent = ability_accents.get(stat_key) if isinstance(ability_accents, dict) else None
+
             if isinstance(help_text, str) and help_text.strip():
                 result[f"ability-help:{stat_key}"] = help_text.strip()
-            if accent:
-                result[f"ability-color:{stat_key}"] = str(accent)
+            if isinstance(accent, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", accent.strip()):
+                result[f"ability-color:{stat_key}"] = accent.strip()
 
             if f"ability-help:{stat_key}" not in result:
                 stat = stats.get_stat(stat_key) if stats is not None and hasattr(stats, "get_stat") else None
