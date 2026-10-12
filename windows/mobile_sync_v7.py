@@ -1,7 +1,7 @@
 """Authoritative Phase 9 V7 mobile actions for the Windows DID app.
 
 This module deliberately mutates the same in-memory Character object used by the
-finished desktop application.  The adapter remains responsible for validation,
+finished desktop application. The adapter remains responsible for validation,
 autosave, and UI refresh after mutating commands.
 """
 from __future__ import annotations
@@ -18,10 +18,6 @@ class MobileV7Result:
     handled: bool
     mutated: bool = False
     result: Optional[dict] = None
-
-
-def _error(adapter: Any, message: str):
-    raise adapter.__class__.__module__ and ValueError(message)
 
 
 def _validation_error(adapter: Any, message: str):
@@ -47,7 +43,12 @@ def _find_note(adapter: Any, note_id: str):
 
 
 def _protect_linked_note(adapter: Any, note: Any) -> None:
-    if str(getattr(note, "linked_improvement_id", "") or "").strip():
+    title = str(getattr(note, "title", "") or "").strip().lower()
+    linked = str(getattr(note, "linked_improvement_id", "") or "").strip()
+    is_system = title in {"spellcasting verbs", "sneak attack"} or (
+        title == "animal buddy" and bool(linked)
+    )
+    if linked or is_system:
         _validation_error(adapter, "System/Improvement notes must be edited through their Improvement")
 
 
@@ -191,16 +192,33 @@ def _improvement_edit(adapter: Any, payload: dict) -> None:
     incoming = payload.get("choices", {})
     if not isinstance(incoming, dict):
         _validation_error(adapter, "Improvement choices must be an object")
-    # Mobile may edit public choice values, but private runtime/system keys are
-    # never accepted from the phone and are preserved verbatim.
-    public_existing = {key for key in existing if not str(key).startswith("_")}
-    allowed = set(public_existing)
+
+    allowed = set()
     try:
-        from character_API import IMPROVEMENT_CATALOG  # type: ignore
-        option = IMPROVEMENT_CATALOG.get(str(getattr(improvement, "catalog_id", "")), {})
-        allowed.update(str(key) for key in option.get("required_choices", []) if str(key))
+        from backend_2_1 import ImprovementCatalogSystem  # type: ignore
+        catalog_id = str(getattr(improvement, "catalog_id", ""))
+        try:
+            option = ImprovementCatalogSystem.get_option(catalog_id, adapter._character()) or {}
+        except TypeError:
+            option = ImprovementCatalogSystem.get_option(catalog_id) or {}
+        required = option.get("required_choices", {})
+        if isinstance(required, dict):
+            allowed.update(str(key) for key in required.keys() if str(key) and not str(key).startswith("_"))
+        elif isinstance(required, (list, tuple)):
+            for item in required:
+                if isinstance(item, str):
+                    key = item
+                elif isinstance(item, dict):
+                    key = str(item.get("key") or item.get("id") or item.get("name") or "")
+                else:
+                    key = ""
+                if key and not key.startswith("_"):
+                    allowed.add(key)
     except Exception:
-        pass
+        # Older desktop builds may not expose the catalog helper. In that case
+        # only existing public fields can be changed, still validated on Windows.
+        allowed.update(str(key) for key in existing if not str(key).startswith("_"))
+
     for key, value in incoming.items():
         key = str(key)
         if key.startswith("_") or key not in allowed:
@@ -210,6 +228,7 @@ def _improvement_edit(adapter: Any, payload: dict) -> None:
             _validation_error(adapter, "Improvement choice is too long")
         existing[key] = text
     improvement.choices = existing
+
     if str(getattr(improvement, "catalog_id", "")) == "custom" or str(getattr(improvement, "source", "")) == "custom":
         if "name" in payload:
             improvement.name = adapter._bounded_text(payload.get("name", ""), label="Improvement name", maximum=240, strip=True)
@@ -220,8 +239,6 @@ def _improvement_edit(adapter: Any, payload: dict) -> None:
 def _roll_exploding(sides: int, rng: random.Random) -> tuple[int, list[int]]:
     total = 0
     faces = []
-    # Hard cap protects against pathological/mock RNGs while preserving normal
-    # exploding-die behavior.
     for _ in range(100):
         face = rng.randint(1, sides)
         faces.append(face)
@@ -229,6 +246,67 @@ def _roll_exploding(sides: int, rng: random.Random) -> tuple[int, list[int]]:
         if face != sides:
             break
     return total, faces
+
+
+def _bounded_roll_count(adapter: Any, payload: dict, field: str) -> int:
+    try:
+        value = int(payload.get(field, 0))
+    except (TypeError, ValueError):
+        _validation_error(adapter, "Ability roll option count must be an integer")
+    if not 0 <= value <= 20:
+        _validation_error(adapter, "Ability roll option count is invalid")
+    return value
+
+
+def _current_roll_modifier_options(adapter: Any, stat_key: str) -> list[dict]:
+    provider = getattr(adapter.window, "_available_roll_modifier_options", None)
+    if not callable(provider):
+        return []
+    try:
+        return [item for item in (provider(stat_key) or []) if isinstance(item, dict)]
+    except Exception:
+        return []
+
+
+def _selected_modifier_options(adapter: Any, stat_key: str, payload: dict) -> list[dict]:
+    raw_indexes = payload.get("option_indexes", [])
+    if raw_indexes is None:
+        return []
+    if not isinstance(raw_indexes, list):
+        _validation_error(adapter, "Ability roll options must be a list")
+    if len(raw_indexes) > 20:
+        _validation_error(adapter, "Too many ability roll options")
+
+    available = _current_roll_modifier_options(adapter, stat_key)
+    selected: list[dict] = []
+    seen = set()
+    for raw in raw_indexes:
+        try:
+            index = int(raw)
+        except (TypeError, ValueError):
+            _validation_error(adapter, "Invalid ability roll option")
+        if index in seen or not 0 <= index < len(available):
+            _validation_error(adapter, "That ability roll option is no longer available")
+        seen.add(index)
+        selected.append(available[index])
+    return selected
+
+
+def _roll_signed_extra(rng: random.Random, option: dict) -> tuple[int, str]:
+    sides = int(option.get("sides", 6))
+    if sides not in {4, 6, 8, 10, 12, 20, 100}:
+        sides = 6
+    sign = -1 if int(option.get("sign", 1)) < 0 else 1
+    explode = bool(option.get("explode", False))
+    if explode:
+        subtotal, faces = _roll_exploding(sides, rng)
+    else:
+        face = rng.randint(1, sides)
+        subtotal, faces = face, [face]
+    label = str(option.get("short_label") or option.get("label") or f"d{sides}")
+    sign_text = "+" if sign > 0 else "−"
+    face_text = "+".join(str(face) for face in faces)
+    return sign * subtotal, f"{sign_text}{label} d{sides}: {face_text}"
 
 
 def _dice_roll(adapter: Any, payload: dict) -> dict:
@@ -242,13 +320,36 @@ def _dice_roll(adapter: Any, payload: dict) -> dict:
         sides = int(stat.die_size)
         if sides < 2:
             _validation_error(adapter, "This ability has no rollable die")
+
         die_total, faces = _roll_exploding(sides, rng)
         bonus = int(getattr(stat, "bonus", 0))
         total = die_total + bonus
-        detail = f"d{sides}: " + " + ".join(str(face) for face in faces)
+        detail_parts = [f"d{sides}: " + " + ".join(str(face) for face in faces)]
         if bonus:
-            detail += f"  {'+' if bonus > 0 else '-'} {abs(bonus)}"
-        return {"title": str(stat_key).title(), "total": total, "detail": detail}
+            detail_parts.append(f"{'+' if bonus > 0 else '−'} bonus {abs(bonus)}")
+
+        advantage = _bounded_roll_count(adapter, payload, "advantage_count")
+        disadvantage = _bounded_roll_count(adapter, payload, "disadvantage_count")
+        # The desktop dice roller cancels opposite d6s before rolling them.
+        cancelled = min(advantage, disadvantage)
+        advantage -= cancelled
+        disadvantage -= cancelled
+
+        for _ in range(advantage):
+            face = rng.randint(1, 6)
+            total += face
+            detail_parts.append(f"+adv. d6: {face}")
+        for _ in range(disadvantage):
+            face = rng.randint(1, 6)
+            total -= face
+            detail_parts.append(f"−dis. d6: {face}")
+
+        for option in _selected_modifier_options(adapter, stat_key, payload):
+            delta, detail = _roll_signed_extra(rng, option)
+            total += delta
+            detail_parts.append(detail)
+
+        return {"title": str(stat_key).title(), "total": total, "detail": "  •  ".join(detail_parts)}
 
     if mode == "other":
         counts = payload.get("dice", {})
