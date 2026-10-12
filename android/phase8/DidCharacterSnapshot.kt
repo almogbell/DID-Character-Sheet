@@ -32,7 +32,7 @@ data class DidCharacterSnapshot(
     val inventory: List<InventoryItemSnapshot>,
     val notes: List<NoteSnapshot>,
     val portrait: PortraitSnapshot,
-    /** Exact SVG artwork supplied by the connected Windows DID installation. */
+    /** Desktop-owned SVG artwork plus presentation/help metadata. */
     val uiIcons: Map<String, String>,
 ) {
     companion object {
@@ -109,6 +109,7 @@ data class DidCharacterSnapshot(
                         rawText = rawText,
                         text = parseNoteText(rawText),
                         color = note.optString("color").nonBlankOrNull(),
+                        displayColor = note.optString("_mobile_display_color").nonBlankOrNull(),
                         expanded = note.optBoolean("expanded", true),
                         pinned = note.optBoolean("pinned", false),
                         linkedImprovementId = note.optString("linked_improvement_id").nonBlankOrNull(),
@@ -151,6 +152,14 @@ data class DidCharacterSnapshot(
                 timesTaken = json.optInt("times_taken", 1),
                 sortOrder = json.optInt("sort_order", 0),
                 empowerments = empowerments,
+                displaySummary = json.optString("_mobile_display_summary").nonBlankOrNull(),
+                displayDetails = json.optString("_mobile_display_details").nonBlankOrNull(),
+                displayChoices = json.optJSONArray("_mobile_display_choices").stringList(),
+                displayUpgrades = json.optJSONArray("_mobile_display_upgrades").stringList(),
+                editable = json.optBoolean("_mobile_editable", false),
+                editableChoiceKeys = json.optJSONArray("_mobile_editable_choice_keys").stringList(),
+                iconSvg = json.optString("_mobile_icon_svg").nonBlankOrNull(),
+                linkedNoteId = json.optString("_mobile_linked_note_id").nonBlankOrNull(),
             )
         }
     }
@@ -172,6 +181,14 @@ data class ImprovementSnapshot(
     val timesTaken: Int,
     val sortOrder: Int,
     val empowerments: List<EmpowermentSnapshot>,
+    val displaySummary: String? = null,
+    val displayDetails: String? = null,
+    val displayChoices: List<String> = emptyList(),
+    val displayUpgrades: List<String> = emptyList(),
+    val editable: Boolean = false,
+    val editableChoiceKeys: List<String> = emptyList(),
+    val iconSvg: String? = null,
+    val linkedNoteId: String? = null,
 )
 data class EmpowermentSnapshot(
     val id: String?,
@@ -196,6 +213,7 @@ data class NoteSnapshot(
     val rawText: String,
     val text: AnnotatedString,
     val color: String?,
+    val displayColor: String? = null,
     val expanded: Boolean,
     val pinned: Boolean,
     val linkedImprovementId: String?,
@@ -220,13 +238,13 @@ private fun parseNoteText(raw: String): AnnotatedString {
         .replace('\u2029', '\n')
         .replace("\uFFFC", "")
 
-    if (!raw.startsWith(RICH_NOTE_MARKER) && !looksLikeHtml(raw)) {
-        return AnnotatedString(plainNormalized.cleanVisibleMarkup())
+    val normalized = raw.removePrefix(RICH_NOTE_MARKER).normalizeEscapedHtml()
+    if (!raw.startsWith(RICH_NOTE_MARKER) && !looksLikeHtml(normalized)) {
+        return AnnotatedString(plainNormalized.normalizeEscapedHtml().cleanVisibleMarkup())
     }
 
     return htmlToAnnotatedString(
-        raw.removePrefix(RICH_NOTE_MARKER)
-            .normalizeEscapedHtml()
+        normalized
             .replace("\u2028", "<br>")
             .replace("\u2029", "<br>")
             .replace("\uFFFC", "")
@@ -247,20 +265,32 @@ fun didHtmlToAnnotatedString(raw: String): AnnotatedString {
     else AnnotatedString(normalized.cleanVisibleMarkup())
 }
 
-private fun String.normalizeEscapedHtml(): String = this
-    .replace("&lt;b&gt;", "<b>", ignoreCase = true)
-    .replace("&lt;/b&gt;", "</b>", ignoreCase = true)
-    .replace("&lt;i&gt;", "<i>", ignoreCase = true)
-    .replace("&lt;/i&gt;", "</i>", ignoreCase = true)
-    .replace("&lt;u&gt;", "<u>", ignoreCase = true)
-    .replace("&lt;/u&gt;", "</u>", ignoreCase = true)
-    .replace("&lt;br&gt;", "<br>", ignoreCase = true)
-    .replace("&lt;br/&gt;", "<br>", ignoreCase = true)
+private fun String.normalizeEscapedHtml(): String {
+    var value = this
+    // Some old saves contain an extra entity-escaping layer. Decode only the
+    // markup entities DID owns, never arbitrary user text.
+    repeat(2) {
+        value = value
+            .replace("&amp;lt;", "&lt;", ignoreCase = true)
+            .replace("&amp;gt;", "&gt;", ignoreCase = true)
+            .replace("&lt;b&gt;", "<b>", ignoreCase = true)
+            .replace("&lt;/b&gt;", "</b>", ignoreCase = true)
+            .replace("&lt;i&gt;", "<i>", ignoreCase = true)
+            .replace("&lt;/i&gt;", "</i>", ignoreCase = true)
+            .replace("&lt;u&gt;", "<u>", ignoreCase = true)
+            .replace("&lt;/u&gt;", "</u>", ignoreCase = true)
+            .replace("&lt;br&gt;", "<br>", ignoreCase = true)
+            .replace("&lt;br/&gt;", "<br>", ignoreCase = true)
+            .replace("&lt;br /&gt;", "<br>", ignoreCase = true)
+    }
+    return value
+}
 
 private fun String.cleanVisibleMarkup(): String = this
-    .replace(Regex("</?b>", RegexOption.IGNORE_CASE), "")
-    .replace(Regex("</?i>", RegexOption.IGNORE_CASE), "")
-    .replace(Regex("</?u>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</?\\s*b\\s*/?>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</?\\s*i\\s*/?>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</?\\s*u\\s*/?>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("&lt;/?\\s*(?:b|i|u)\\s*&gt;", RegexOption.IGNORE_CASE), "")
 
 private fun looksLikeHtml(value: String): Boolean =
     Regex("<(?:/?(?:b|i|u|span|p|div)|br\\s*/?)\\b", RegexOption.IGNORE_CASE).containsMatchIn(value)
@@ -296,7 +326,9 @@ private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
         val raw = opt(index)
         when (raw) {
             is JSONObject -> {
-                val data = sequenceOf("image_data", "data", "image", "base64")
+                // Current Windows serializer calls the image payload "display".
+                // Keep the older aliases so already-saved characters still work.
+                val data = sequenceOf("display", "image_data", "data", "image", "base64")
                     .map { raw.optString(it) }
                     .firstOrNull { it.isNotBlank() }
                     ?: return@mapNotNull null
@@ -311,6 +343,11 @@ private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
             else -> null
         }
     }
+}
+
+private fun JSONArray?.stringList(): List<String> {
+    if (this == null) return emptyList()
+    return (0 until length()).mapNotNull { index -> optString(index).nonBlankOrNull() }
 }
 
 private fun JSONObject?.stringMap(): Map<String, String> {
