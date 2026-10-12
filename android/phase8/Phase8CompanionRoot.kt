@@ -76,7 +76,7 @@ fun Phase8CompanionRoot(
 
     Column(modifier.fillMaxSize()) {
         ConnectionBanner(state, onReconnect, onRefresh)
-        Phase9CompanionSheetV7(
+        Phase9CompanionSheetV8(
             state = state,
             onSetHp = onSetHp,
             onSetAt = onSetAt,
