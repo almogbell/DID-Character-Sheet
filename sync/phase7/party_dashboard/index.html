@@ -41,6 +41,19 @@
         </div>
       </div>
 
+      <section class="live-panel" aria-label="Live session">
+        <div class="live-heading">
+          <div>
+            <div class="eyebrow">LIVE PLAY</div>
+            <h2>Current Session</h2>
+          </div>
+          <span id="sessionBadge" class="session-badge idle">No active session</span>
+        </div>
+        <div id="sessionText" class="summary-text compact">Recent rolls appear here only while a campaign session is active.</div>
+        <div id="rollEmpty" class="roll-empty">No shared rolls yet.</div>
+        <div id="recentRolls" class="roll-list"></div>
+      </section>
+
       <div id="partySummary" class="summary-text"></div>
       <section id="partyGrid" class="party-grid"></section>
     </section>
@@ -52,5 +65,6 @@
   </dialog>
 
   <script src="app.js"></script>
+  <script src="live.js"></script>
 </body>
 </html>
