@@ -36,6 +36,16 @@ class DesktopSyncAdapter:
     MAX_BACKSTORY_CHARS = 50_000
     MAX_ITEM_DESCRIPTION_CHARS = 25_000
 
+    _NOTE_COLORS = {
+        "red": "#f3a6a6",
+        "orange": "#ffc078",
+        "yellow": "#ffe98a",
+        "green": "#a8e6b0",
+        "blue": "#9fcfe3",
+        "purple": "#c8b6ff",
+        "pink": "#f4b6cf",
+    }
+
     def __init__(self, window: Any, storage_system: Any, hooks: Optional[FrontendHooks] = None) -> None:
         self.window = window
         self.storage_system = storage_system
@@ -51,8 +61,12 @@ class DesktopSyncAdapter:
 
         state = self.storage_system.character_to_dict(character)
         if isinstance(state, dict):
+            assets = self._load_mobile_assets()
+            self._enrich_improvements(state, character)
+            self._enrich_notes(state)
             state["_mobile_ui"] = {
-                "icons": self._load_mobile_assets(),
+                "icons": assets,
+                "ability_options": self._mobile_ability_options(),
             }
         return state
 
@@ -61,12 +75,196 @@ class DesktopSyncAdapter:
         value = re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower())
         return value.strip("_")
 
-    def _load_mobile_assets(self) -> dict[str, str]:
-        """Return desktop-owned artwork/help used by the Android presentation.
+    @staticmethod
+    def _icon_match_key(value: str) -> str:
+        return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
 
-        SVG values are base64 encoded. ``ability-help:*`` values are plain text;
-        Android only reads them as text and never sends them back as rules.
+    @staticmethod
+    def _read_svg_base64(path: str | None) -> str | None:
+        if not path or not os.path.isfile(path):
+            return None
+        try:
+            with open(path, "rb") as handle:
+                raw = handle.read()
+            return base64.b64encode(raw).decode("ascii") if raw else None
+        except (OSError, ValueError):
+            return None
+
+    def _find_improvement_icon_path(self, improvement: Any, display_name: str = "") -> str | None:
+        """Mirror the desktop improvement-icon matching rules.
+
+        This deliberately runs on Windows so Android never has to know catalog
+        naming conventions or custom-icon rules.
         """
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        icon_dir = os.path.join(app_dir, "icons", "improvements")
+        if not os.path.isdir(icon_dir):
+            return None
+
+        candidates: list[str] = []
+        choices = getattr(improvement, "choices", {}) or {}
+        if str(getattr(improvement, "catalog_id", "")) == "custom":
+            chosen = str(choices.get("_custom_icon", "") or "").strip()
+            if chosen and os.path.basename(chosen) == chosen:
+                candidates.append(chosen.removesuffix(".svg"))
+        candidates.extend([
+            str(getattr(improvement, "catalog_id", "") or ""),
+            str(getattr(improvement, "name", "") or ""),
+            str(display_name or ""),
+        ])
+        candidates = [value.strip() for value in candidates if value and value.strip()]
+
+        for candidate in candidates:
+            for filename in (
+                f"{candidate}.svg",
+                f"{candidate.lower()}.svg",
+                f"{self._asset_key(candidate)}.svg",
+            ):
+                path = os.path.join(icon_dir, filename)
+                if os.path.isfile(path):
+                    return path
+
+        wanted = {self._icon_match_key(candidate) for candidate in candidates}
+        try:
+            for filename in os.listdir(icon_dir):
+                if filename.lower().endswith(".svg") and self._icon_match_key(os.path.splitext(filename)[0]) in wanted:
+                    return os.path.join(icon_dir, filename)
+        except OSError:
+            return None
+        return None
+
+    @staticmethod
+    def _required_choice_keys(option: dict | None) -> list[str]:
+        if not isinstance(option, dict):
+            return []
+        required = option.get("required_choices")
+        if isinstance(required, dict):
+            return [str(key) for key in required.keys() if str(key) and not str(key).startswith("_")]
+        if isinstance(required, (list, tuple)):
+            keys = []
+            for item in required:
+                if isinstance(item, str):
+                    key = item
+                elif isinstance(item, dict):
+                    key = str(item.get("key") or item.get("id") or item.get("name") or "")
+                else:
+                    key = ""
+                if key and not key.startswith("_"):
+                    keys.append(key)
+            return keys
+        return []
+
+    def _enrich_improvements(self, state: dict, character: Any) -> None:
+        state_items = (
+            state.get("improvements", {}).get("list_of_taken_improvements", [])
+            if isinstance(state.get("improvements"), dict) else []
+        )
+        character_system = getattr(character, "improvements", None)
+        live_items = list(getattr(character_system, "list_of_taken_improvements", []) or [])
+        if not isinstance(state_items, list) or not live_items:
+            return
+
+        try:
+            from backend_2_1 import ImprovementSystem, ImprovementCatalogSystem  # type: ignore
+        except ImportError:
+            return
+
+        live_by_id = {str(getattr(item, "id", "")): item for item in live_items if getattr(item, "id", None)}
+        notes = list(getattr(getattr(character, "notes", None), "list_of_notes", []) or [])
+
+        for index, serialized in enumerate(state_items):
+            if not isinstance(serialized, dict):
+                continue
+            live = live_by_id.get(str(serialized.get("id", "")))
+            if live is None and index < len(live_items):
+                live = live_items[index]
+            if live is None:
+                continue
+
+            try:
+                display = ImprovementSystem.build_improvement_display(character, live) or {}
+            except Exception:
+                display = {}
+
+            serialized["_mobile_display_summary"] = str(display.get("summary") or "")
+            serialized["_mobile_display_details"] = str(display.get("details") or "")
+            serialized["_mobile_display_choices"] = [str(line) for line in (display.get("choices") or []) if str(line).strip()]
+            serialized["_mobile_display_upgrades"] = [str(line) for line in (display.get("upgrades") or []) if str(line).strip()]
+
+            catalog_id = str(getattr(live, "catalog_id", "") or "")
+            try:
+                option = ImprovementCatalogSystem.get_option(catalog_id, character)
+            except TypeError:
+                option = ImprovementCatalogSystem.get_option(catalog_id)
+            except Exception:
+                option = None
+            editable_keys = self._required_choice_keys(option)
+            custom = catalog_id == "custom" or str(getattr(live, "source", "")) == "custom"
+            serialized["_mobile_editable_choice_keys"] = editable_keys
+            serialized["_mobile_editable"] = bool(custom or editable_keys)
+
+            icon_path = self._find_improvement_icon_path(live, str(display.get("name") or ""))
+            icon_svg = self._read_svg_base64(icon_path)
+            if icon_svg:
+                serialized["_mobile_icon_svg"] = icon_svg
+
+            improvement_id = str(getattr(live, "id", "") or "")
+            linked = next(
+                (note for note in notes if str(getattr(note, "linked_improvement_id", "") or "") == improvement_id),
+                None,
+            )
+            if linked is None:
+                target_title = None
+                if catalog_id in {"spellcasting", "magic_novice"}:
+                    target_title = "spellcasting verbs"
+                elif catalog_id == "sneak_attack":
+                    target_title = "sneak attack"
+                if target_title:
+                    linked = next(
+                        (note for note in notes if str(getattr(note, "title", "") or "").strip().lower() == target_title),
+                        None,
+                    )
+            if linked is not None and getattr(linked, "id", None):
+                serialized["_mobile_linked_note_id"] = str(linked.id)
+
+    def _enrich_notes(self, state: dict) -> None:
+        notes = state.get("notes", {}).get("list_of_notes", []) if isinstance(state.get("notes"), dict) else []
+        if not isinstance(notes, list):
+            return
+        for note in notes:
+            if not isinstance(note, dict):
+                continue
+            raw = str(note.get("color") or "").strip()
+            if re.fullmatch(r"#[0-9a-fA-F]{6}", raw):
+                note["_mobile_display_color"] = raw
+            else:
+                note["_mobile_display_color"] = self._NOTE_COLORS.get(raw.lower(), self._NOTE_COLORS["yellow"])
+
+    def _mobile_ability_options(self) -> dict[str, list[dict]]:
+        result: dict[str, list[dict]] = {}
+        provider = getattr(self.window, "_available_roll_modifier_options", None)
+        if not callable(provider):
+            return result
+        for stat_key in ("agility", "finesse", "instinct", "knowledge", "presence", "strength"):
+            try:
+                options = provider(stat_key) or []
+                result[stat_key] = [
+                    {
+                        "kind": str(item.get("kind") or "bonus_die"),
+                        "label": str(item.get("label") or item.get("short_label") or "Die"),
+                        "short_label": str(item.get("short_label") or "die"),
+                        "sides": int(item.get("sides", 6)),
+                        "sign": -1 if int(item.get("sign", 1)) < 0 else 1,
+                        "explode": bool(item.get("explode", False)),
+                    }
+                    for item in options if isinstance(item, dict)
+                ]
+            except Exception:
+                result[stat_key] = []
+        return result
+
+    def _load_mobile_assets(self) -> dict[str, str]:
+        """Return desktop-owned artwork/help used by the Android presentation."""
         app_dir = os.path.dirname(os.path.abspath(__file__))
         paths = {
             "agility": os.path.join(app_dir, "icons", "agility.svg"),
@@ -88,8 +286,6 @@ class DesktopSyncAdapter:
                 paths["notes"] = candidate
                 break
 
-        # Improvement artwork stays authoritative on Windows. Scan the actual
-        # desktop icon directory rather than freezing a Kotlin-side mapping.
         improvement_dir = os.path.join(app_dir, "icons", "improvements")
         if os.path.isdir(improvement_dir):
             for root, _dirs, files in os.walk(improvement_dir):
@@ -105,33 +301,32 @@ class DesktopSyncAdapter:
 
         result: dict[str, str] = {}
         for key, path in paths.items():
-            try:
-                with open(path, "rb") as handle:
-                    raw = handle.read()
-                if raw:
-                    result[key] = base64.b64encode(raw).decode("ascii")
-            except (OSError, ValueError):
-                continue
+            encoded = self._read_svg_base64(path)
+            if encoded:
+                result[key] = encoded
 
-        # Supply the same desktop-owned hover/help text whenever the live stat
-        # object exposes it. Different historical desktop builds used slightly
-        # different attribute names, so accept the known presentation aliases.
-        try:
-            stats = getattr(self._character(), "stats", None)
-            for stat_key in ("agility", "finesse", "instinct", "knowledge", "presence", "strength"):
+        # Prefer the exact presentation metadata already attached to the live
+        # desktop rows. This keeps Android hover help and ability colors in sync
+        # with the finished Windows UI instead of duplicating them in Kotlin.
+        rows = getattr(self.window, "stat_rows", {}) or {}
+        stats = getattr(self._character(), "stats", None)
+        for stat_key in ("agility", "finesse", "instinct", "knowledge", "presence", "strength"):
+            row = rows.get(stat_key) if isinstance(rows, dict) else None
+            help_text = getattr(row, "_ability_tooltip_text", None) if row is not None else None
+            accent = getattr(row, "_ability_tooltip_accent", None) if row is not None else None
+            if isinstance(help_text, str) and help_text.strip():
+                result[f"ability-help:{stat_key}"] = help_text.strip()
+            if accent:
+                result[f"ability-color:{stat_key}"] = str(accent)
+
+            if f"ability-help:{stat_key}" not in result:
                 stat = stats.get_stat(stat_key) if stats is not None and hasattr(stats, "get_stat") else None
-                if stat is None:
-                    continue
-                help_text = None
-                for attr in ("tooltip", "tool_tip", "help_text", "description", "info", "explanation"):
-                    value = getattr(stat, attr, None)
-                    if isinstance(value, str) and value.strip():
-                        help_text = value.strip()
-                        break
-                if help_text:
-                    result[f"ability-help:{stat_key}"] = help_text
-        except Exception:
-            pass
+                if stat is not None:
+                    for attr in ("tooltip", "tool_tip", "help_text", "description", "info", "explanation"):
+                        value = getattr(stat, attr, None)
+                        if isinstance(value, str) and value.strip():
+                            result[f"ability-help:{stat_key}"] = value.strip()
+                            break
 
         return result
 
