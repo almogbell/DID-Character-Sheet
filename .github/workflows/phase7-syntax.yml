@@ -18,4 +18,6 @@ jobs:
       - name: Python syntax
         run: python -m py_compile sync/phase7/*.py
       - name: JavaScript syntax
-        run: node --check sync/phase7/party_dashboard/app.js
+        run: |
+          node --check sync/phase7/party_dashboard/app.js
+          node --check sync/phase7/party_dashboard/live.js
