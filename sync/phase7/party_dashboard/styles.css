@@ -62,6 +62,7 @@ p { color: var(--muted); }
 .error-text { color: var(--danger); margin-top: 8px; }
 .campaign-actions { display: flex; align-items: center; gap: 8px; }
 .summary-text { margin: 18px 2px 12px; color: var(--muted); }
+.summary-text.compact { margin: 8px 0 10px; }
 .party-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -106,6 +107,43 @@ p { color: var(--muted); }
 .ability.knowledge { border-color:#d9bf91; background:#fcf7ed; }
 .card-foot { margin-top: 12px; color: var(--muted); font-size: 11px; display:flex; justify-content:flex-end; }
 .empty-state { border:1px dashed var(--gold-soft); border-radius:12px; padding:22px; color:var(--muted); background:var(--panel); }
+
+.live-panel {
+  margin-top: 14px;
+  padding: 16px 18px;
+  background: var(--panel);
+  border: 1px solid var(--gold-soft);
+  border-radius: 14px;
+}
+.live-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.live-heading h2 { font-size:22px; }
+.session-badge {
+  border:1px solid var(--gold-soft);
+  border-radius:999px;
+  padding:6px 11px;
+  font-size:12px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.session-badge.live { background:#e8f4e9; border-color:#9ab99f; }
+.session-badge.idle { background:#f5efe2; color:var(--muted); }
+.roll-list { display:grid; gap:7px; margin-top:8px; }
+.roll-empty { color:var(--muted); font-style:italic; padding:6px 0 2px; }
+.roll-item {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  padding:9px 11px;
+  border:1px solid var(--gold-soft);
+  border-radius:10px;
+  background:#fffaf0;
+}
+.roll-main { min-width:0; }
+.roll-title { font-size:13px; font-weight:800; }
+.roll-result { margin-top:2px; font-size:12px; color:var(--muted); overflow-wrap:anywhere; }
+.roll-time { color:var(--muted); font-size:11px; white-space:nowrap; }
+
 dialog {
   width: min(760px, calc(100vw - 36px));
   max-height: calc(100vh - 50px);
@@ -128,9 +166,10 @@ dialog::backdrop { background: rgba(20, 15, 10, .35); }
 .sharing-footnote { margin-top:16px; color:var(--muted); font-size:11px; }
 @media (max-width: 700px) {
   .shell { padding: 14px; }
-  .topbar, .campaign-bar { align-items: flex-start; flex-direction: column; }
+  .topbar, .campaign-bar, .live-heading { align-items: flex-start; flex-direction: column; }
   .campaign-actions { width: 100%; }
   .campaign-actions select { flex: 1; }
   .party-grid { grid-template-columns: 1fr; }
   .abilities { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .roll-item { align-items:flex-start; }
 }
