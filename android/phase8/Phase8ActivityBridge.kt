@@ -33,7 +33,7 @@ class Phase8ActivityBridge(
                     ?.takeIf { it.startsWith("image/") }
                     ?: "image/png"
                 val bytes = activity.contentResolver.openInputStream(uri)?.use { input ->
-                    input.readBytes(MAX_IMAGE_BYTES + 1)
+                    input.readBytes()
                 } ?: error("Could not read the selected image.")
                 require(bytes.isNotEmpty()) { "The selected image is empty." }
                 require(bytes.size <= MAX_IMAGE_BYTES) {
