@@ -27,6 +27,12 @@ def main():
     print("\nPhase 7 base install...")
     runpy.run_path(str(here / "install_phase7.py"), run_name="__main__")
 
+    # Direct PostgREST upserts on party_character_state produced a PostgreSQL
+    # table-permission 403 on some Supabase/PostgREST versions. Use the
+    # owner-checked RPC installed by campaign_supabase_phase7_hotfix_02.sql.
+    print("\nPhase 7 Party state RPC client repair...")
+    runpy.run_path(str(here / "repair_phase7_party_state_rpc.py"), run_name="__main__")
+
     print("\nPhase 7 UI repair v2...")
     runpy.run_path(str(here / "repair_phase7_ui_v2.py"), run_name="__main__")
 
@@ -42,7 +48,8 @@ def main():
     runpy.run_path(str(here / "restore_phase7_ui_v4.py"), run_name="__main__")
 
     print("\nPHASE 7 FINAL INSTALL: PASS")
-    print("NEXT: run campaign_supabase_phase7_live.sql in Supabase SQL Editor.")
+    print("NEXT: run campaign_supabase_phase7_hotfix_02.sql in Supabase SQL Editor.")
+    print("If not already installed, also run campaign_supabase_phase7_live.sql.")
     print("Then restart with: python frontend_2_8.py")
 
 
