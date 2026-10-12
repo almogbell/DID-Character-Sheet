@@ -17,3 +17,5 @@ jobs:
         run: python -m py_compile sync/phase8/*.py
       - name: JavaScript syntax
         run: node --check sync/phase8/campaign_layer.js
+      - name: Phase 8 static integration test
+        run: python sync/phase8/test_phase8.py
