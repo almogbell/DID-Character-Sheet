@@ -34,6 +34,8 @@ data class DidCharacterSnapshot(
     val portrait: PortraitSnapshot,
     /** Desktop-owned SVG artwork plus presentation/help metadata. */
     val uiIcons: Map<String, String>,
+    /** Desktop-owned right-click roll modifiers, keyed by ability. */
+    val abilityOptions: Map<String, List<AbilityRollOptionSnapshot>>,
 ) {
     companion object {
         fun fromJson(json: JSONObject): DidCharacterSnapshot {
@@ -58,7 +60,9 @@ data class DidCharacterSnapshot(
             val notesJson = json.optJSONObject("notes")
                 ?.optJSONArray("list_of_notes") ?: JSONArray()
             val imageJson = json.optJSONObject("image") ?: JSONObject()
-            val iconJson = json.optJSONObject("_mobile_ui")?.optJSONObject("icons")
+            val mobileUi = json.optJSONObject("_mobile_ui")
+            val iconJson = mobileUi?.optJSONObject("icons")
+            val abilityOptionsJson = mobileUi?.optJSONObject("ability_options")
 
             val defenseKey = json.optString("selected_defense_stat_name")
                 .nonBlankOrNull()
@@ -110,6 +114,7 @@ data class DidCharacterSnapshot(
                         text = parseNoteText(rawText),
                         color = note.optString("color").nonBlankOrNull(),
                         displayColor = note.optString("_mobile_display_color").nonBlankOrNull(),
+                        editable = note.optBoolean("_mobile_editable", note.optString("linked_improvement_id").isBlank()),
                         expanded = note.optBoolean("expanded", true),
                         pinned = note.optBoolean("pinned", false),
                         linkedImprovementId = note.optString("linked_improvement_id").nonBlankOrNull(),
@@ -123,6 +128,7 @@ data class DidCharacterSnapshot(
                     scale = imageJson.optDouble("scale", 1.0),
                 ),
                 uiIcons = iconJson.stringMap(),
+                abilityOptions = abilityOptionsJson.abilityOptionMap(),
             )
         }
 
@@ -169,6 +175,15 @@ data class StatSnapshot(val key: String, val name: String, val dieSize: Int, val
 data class HpSnapshot(val current: Int, val max: Int, val maxHearts: Int)
 data class AdversitySnapshot(val current: Int, val max: Int)
 data class ProgressionSnapshot(val currentIp: Int, val usedIp: Int, val level: Int)
+data class AbilityRollOptionSnapshot(
+    val index: Int,
+    val kind: String,
+    val label: String,
+    val shortLabel: String,
+    val sides: Int,
+    val sign: Int,
+    val explode: Boolean,
+)
 data class ImprovementSnapshot(
     val id: String?,
     val catalogId: String?,
@@ -214,6 +229,7 @@ data class NoteSnapshot(
     val text: AnnotatedString,
     val color: String?,
     val displayColor: String? = null,
+    val editable: Boolean = true,
     val expanded: Boolean,
     val pinned: Boolean,
     val linkedImprovementId: String?,
@@ -267,8 +283,6 @@ fun didHtmlToAnnotatedString(raw: String): AnnotatedString {
 
 private fun String.normalizeEscapedHtml(): String {
     var value = this
-    // Some old saves contain an extra entity-escaping layer. Decode only the
-    // markup entities DID owns, never arbitrary user text.
     repeat(2) {
         value = value
             .replace("&amp;lt;", "&lt;", ignoreCase = true)
@@ -326,8 +340,6 @@ private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
         val raw = opt(index)
         when (raw) {
             is JSONObject -> {
-                // Current Windows serializer calls the image payload "display".
-                // Keep the older aliases so already-saved characters still work.
                 val data = sequenceOf("display", "image_data", "data", "image", "base64")
                     .map { raw.optString(it) }
                     .firstOrNull { it.isNotBlank() }
@@ -341,6 +353,26 @@ private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
                 PortraitImageSnapshot(id = "image-$index", data = it)
             }
             else -> null
+        }
+    }
+}
+
+private fun JSONObject?.abilityOptionMap(): Map<String, List<AbilityRollOptionSnapshot>> {
+    if (this == null) return emptyMap()
+    return keys().asSequence().associateWith { statKey ->
+        val array = optJSONArray(statKey) ?: JSONArray()
+        (0 until array.length()).mapNotNull { index ->
+            array.optJSONObject(index)?.let { item ->
+                AbilityRollOptionSnapshot(
+                    index = index,
+                    kind = item.optString("kind", "bonus_die"),
+                    label = item.optString("label", item.optString("short_label", "Die")),
+                    shortLabel = item.optString("short_label", "die"),
+                    sides = item.optInt("sides", 6),
+                    sign = if (item.optInt("sign", 1) < 0) -1 else 1,
+                    explode = item.optBoolean("explode", false),
+                )
+            }
         }
     }
 }
