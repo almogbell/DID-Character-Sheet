@@ -55,7 +55,7 @@ begin
         p_campaign_id,
         p_state
     )
-    on conflict (campaign_character_id)
+    on conflict on constraint party_character_state_pkey
     do update set
         campaign_id = excluded.campaign_id,
         state = excluded.state,
