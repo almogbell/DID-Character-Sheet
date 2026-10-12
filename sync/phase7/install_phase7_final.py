@@ -19,6 +19,11 @@ def main():
         run_name="__main__",
     )
 
+    # Put the new live-dashboard files in the project before the base installer
+    # runs test_phase7.py. The base installer then copies the updated HTML/CSS.
+    print("\nPhase 7 live Party Dashboard assets...")
+    runpy.run_path(str(here / "install_phase7_live_assets.py"), run_name="__main__")
+
     print("\nPhase 7 base install...")
     runpy.run_path(str(here / "install_phase7.py"), run_name="__main__")
 
@@ -37,7 +42,8 @@ def main():
     runpy.run_path(str(here / "restore_phase7_ui_v4.py"), run_name="__main__")
 
     print("\nPHASE 7 FINAL INSTALL: PASS")
-    print("Restart with: python frontend_2_8.py")
+    print("NEXT: run campaign_supabase_phase7_live.sql in Supabase SQL Editor.")
+    print("Then restart with: python frontend_2_8.py")
 
 
 if __name__ == "__main__":
