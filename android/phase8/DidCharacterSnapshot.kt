@@ -14,7 +14,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Typed, read-only view of the canonical character snapshot sent by Windows. */
+/** Typed view of the canonical character snapshot sent by Windows. */
 data class DidCharacterSnapshot(
     val id: String?,
     val name: String,
@@ -63,9 +63,7 @@ data class DidCharacterSnapshot(
             val defenseKey = json.optString("selected_defense_stat_name")
                 .nonBlankOrNull()
                 ?.takeIf { selected -> stats.any { it.key == selected } }
-                ?: stats.maxWithOrNull(
-                    compareBy<StatSnapshot> { it.dieSize }.thenBy { it.bonus }
-                )?.key
+                ?: stats.maxWithOrNull(compareBy<StatSnapshot> { it.dieSize }.thenBy { it.bonus })?.key
             val defenseStat = stats.firstOrNull { it.key == defenseKey }
             val maxAt = atJson.optInt("max_AT", 0)
 
@@ -216,46 +214,61 @@ data class PortraitSnapshot(
 
 private const val RICH_NOTE_MARKER = "<!--DID_RICH_NOTE-->"
 
-/**
- * The desktop note editor stores formatted player notes as a tiny, controlled
- * HTML subset prefixed by RICH_NOTE_MARKER. Android must render that format,
- * not show the storage markup as literal text.
- */
 private fun parseNoteText(raw: String): AnnotatedString {
     val plainNormalized = raw
         .replace('\u2028', '\n')
         .replace('\u2029', '\n')
         .replace("\uFFFC", "")
 
-    if (!raw.startsWith(RICH_NOTE_MARKER)) {
-        return AnnotatedString(plainNormalized)
+    if (!raw.startsWith(RICH_NOTE_MARKER) && !looksLikeHtml(raw)) {
+        return AnnotatedString(plainNormalized.cleanVisibleMarkup())
     }
 
-    val htmlSource = raw
-        .removePrefix(RICH_NOTE_MARKER)
-        .replace("\u2028", "<br>")
-        .replace("\u2029", "<br>")
-        .replace("\uFFFC", "")
-
-    return htmlToAnnotatedString(htmlSource)
+    return htmlToAnnotatedString(
+        raw.removePrefix(RICH_NOTE_MARKER)
+            .normalizeEscapedHtml()
+            .replace("\u2028", "<br>")
+            .replace("\u2029", "<br>")
+            .replace("\uFFFC", "")
+    )
 }
 
-/** Render the small HTML subset also used by built-in/system notes and improvements. */
+/** Render the small HTML subset used by Windows notes/improvements. */
 fun didHtmlToAnnotatedString(raw: String): AnnotatedString {
+    if (raw.isBlank()) return AnnotatedString("")
     val normalized = raw
         .removePrefix(RICH_NOTE_MARKER)
+        .normalizeEscapedHtml()
         .replace('\u2028', '\n')
         .replace('\u2029', '\n')
         .replace("\uFFFC", "")
         .replace("\n", "<br>")
-    return htmlToAnnotatedString(normalized)
+    return if (looksLikeHtml(normalized)) htmlToAnnotatedString(normalized)
+    else AnnotatedString(normalized.cleanVisibleMarkup())
 }
+
+private fun String.normalizeEscapedHtml(): String = this
+    .replace("&lt;b&gt;", "<b>", ignoreCase = true)
+    .replace("&lt;/b&gt;", "</b>", ignoreCase = true)
+    .replace("&lt;i&gt;", "<i>", ignoreCase = true)
+    .replace("&lt;/i&gt;", "</i>", ignoreCase = true)
+    .replace("&lt;u&gt;", "<u>", ignoreCase = true)
+    .replace("&lt;/u&gt;", "</u>", ignoreCase = true)
+    .replace("&lt;br&gt;", "<br>", ignoreCase = true)
+    .replace("&lt;br/&gt;", "<br>", ignoreCase = true)
+
+private fun String.cleanVisibleMarkup(): String = this
+    .replace(Regex("</?b>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</?i>", RegexOption.IGNORE_CASE), "")
+    .replace(Regex("</?u>", RegexOption.IGNORE_CASE), "")
+
+private fun looksLikeHtml(value: String): Boolean =
+    Regex("<(?:/?(?:b|i|u|span|p|div)|br\\s*/?)\\b", RegexOption.IGNORE_CASE).containsMatchIn(value)
 
 private fun htmlToAnnotatedString(htmlSource: String): AnnotatedString {
     val spanned: Spanned = Html.fromHtml(htmlSource, Html.FROM_HTML_MODE_LEGACY)
     return buildAnnotatedString {
-        append(spanned.toString())
-
+        append(spanned.toString().cleanVisibleMarkup())
         spanned.getSpans(0, spanned.length, StyleSpan::class.java).forEach { span ->
             val start = spanned.getSpanStart(span).coerceAtLeast(0)
             val end = spanned.getSpanEnd(span).coerceAtMost(length)
@@ -264,9 +277,7 @@ private fun htmlToAnnotatedString(htmlSource: String): AnnotatedString {
                 Typeface.BOLD -> addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
                 Typeface.ITALIC -> addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
                 Typeface.BOLD_ITALIC -> addStyle(
-                    SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic),
-                    start,
-                    end,
+                    SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic), start, end
                 )
             }
         }
@@ -278,15 +289,27 @@ private fun htmlToAnnotatedString(htmlSource: String): AnnotatedString {
     }
 }
 
+/** Windows has used both object and raw-string image serialization over time. */
 private fun JSONArray?.portraitImages(): List<PortraitImageSnapshot> {
     if (this == null) return emptyList()
     return (0 until length()).mapNotNull { index ->
-        val item = optJSONObject(index) ?: return@mapNotNull null
-        val data = item.optString("image_data").nonBlankOrNull() ?: return@mapNotNull null
-        PortraitImageSnapshot(
-            id = item.optString("id").nonBlankOrNull(),
-            data = data,
-        )
+        val raw = opt(index)
+        when (raw) {
+            is JSONObject -> {
+                val data = sequenceOf("image_data", "data", "image", "base64")
+                    .map { raw.optString(it) }
+                    .firstOrNull { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                PortraitImageSnapshot(
+                    id = raw.optString("id").nonBlankOrNull() ?: "image-$index",
+                    data = data,
+                )
+            }
+            is String -> raw.takeIf { it.isNotBlank() }?.let {
+                PortraitImageSnapshot(id = "image-$index", data = it)
+            }
+            else -> null
+        }
     }
 }
 
@@ -296,9 +319,6 @@ private fun JSONObject?.stringMap(): Map<String, String> {
         optString(key).nonBlankOrNull()?.let { key to it }
     }.toMap()
 }
-
-private fun JSONArray.mapObjects(transform: (JSONObject) -> ImprovementSnapshot): List<ImprovementSnapshot> =
-    (0 until length()).mapNotNull { index -> optJSONObject(index)?.let(transform) }
 
 private fun <T> JSONArray.mapObjects(transform: (JSONObject) -> T): List<T> =
     (0 until length()).mapNotNull { index -> optJSONObject(index)?.let(transform) }
