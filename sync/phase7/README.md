@@ -9,7 +9,7 @@ This phase separates campaign use by role instead of forcing DM and player contr
 - DM Dashboard and Party Dashboard
 - live campaign character roster
 - DM can remove a character from the live campaign without deleting the player's local `.didchar`
-- elegant read/edit Creation Rules summary
+- clean read/edit Creation Rules summary
 
 **My Campaigns...** is for campaigns you joined as a player:
 - join/select player campaigns
@@ -23,9 +23,16 @@ Backstory sharing is removed because the character sheet does not own a Backstor
 
 ## Dashboard changes
 
-The DM Dashboard now uses **HP** rather than Hearts for the numeric resource display and safely renders the basic rich-text formatting in shared notes instead of showing literal `<b>` / `<br>` tags.
+The DM Dashboard uses **HP** rather than Hearts for the numeric resource display and safely renders the basic rich-text formatting in shared notes instead of showing literal `<b>` / `<br>` tags.
 
-The new **Party Dashboard** is visible to campaign members through a one-time browser pairing code. It reads only `party_character_state`, which is a separate player-controlled payload. Party sharing defaults to name/identity only; HP, AT, abilities, Improvements, portrait, inventory and notes are opt-in.
+The **Party Dashboard** is visible to campaign members through a one-time browser pairing code. It reads only player-controlled Party payloads for character information. Party sharing defaults to name/identity only; HP, AT, abilities, Improvements, portrait, inventory and notes are opt-in.
+
+The Party Dashboard also has a **Live Play** panel:
+- active session / no active session status
+- recent session rolls in newest-first order
+- Realtime updates when session state or shared rolls change
+- rolls appear only while a session is active
+- the existing player setting **Share my dice rolls during active sessions** is authoritative; when disabled, that player's roll never enters the Party feed
 
 ## Install
 
@@ -36,13 +43,15 @@ The new **Party Dashboard** is visible to campaign members through a one-time br
 python phase7\install_phase7_final.py
 ```
 
-The final installer applies a packaged UI preflight repair first, then runs the normal Phase 7 installer, Python compilation checks and local Phase 7 tests.
+The installer keeps the pre-v5 Campaign/My Campaigns visual state, installs the live Party Dashboard assets, compiles the Python files, and runs the local Phase 7 checks.
 
-3. In Supabase SQL Editor run the full contents of:
+3. If you have already run `campaign_supabase_phase7.sql`, run the new incremental migration:
 
 ```text
-campaign_supabase_phase7.sql
+campaign_supabase_phase7_live.sql
 ```
+
+If this is a fresh Phase 7 install, run `campaign_supabase_phase7.sql` first and then `campaign_supabase_phase7_live.sql`.
 
 4. Restart the app:
 
@@ -52,11 +61,37 @@ python frontend_2_8.py
 
 5. Test both menu entries under **Tools -> Campaign & Templates**.
 
+## End-to-end cloud smoke test
+
+After both Phase 7 SQL files are installed, run:
+
+```bat
+python phase7_party_smoke_test.py
+```
+
+The smoke test uses two temporary anonymous Supabase users and removes its temporary campaign afterward. It verifies:
+- create/join campaign
+- link character
+- Party sharing payload
+- Party Dashboard pairing RPC
+- active session visibility
+- shared session roll reaches Party feed
+- disabling roll sharing keeps the next roll private
+- ending the session clears active-session status
+- DM Remove from Campaign removes the Party state without deleting any local `.didchar`
+
+A successful run ends with:
+
+```text
+PHASE 7 PARTY DASHBOARD SMOKE TEST: PASS
+```
+
 ## Important
 
-The SQL migration is required for:
+The SQL migrations are required for:
 - DM Remove from Campaign
 - Party Dashboard state
 - Party Dashboard browser pairing
+- Party Dashboard live session roll feed
 
-Until the SQL is installed, the normal DM-safe character sync continues working, but those new Phase 7 cloud features will not.
+Until the live SQL migration is installed, the normal character sync and Party character cards still work, but the Party Dashboard live roll feed will not.
