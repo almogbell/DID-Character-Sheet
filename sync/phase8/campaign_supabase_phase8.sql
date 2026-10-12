@@ -8,7 +8,7 @@ begin;
 create table if not exists public.campaign_dm_notes (
     id uuid primary key default gen_random_uuid(),
     campaign_id uuid not null references public.campaigns(id) on delete cascade,
-    created_by_user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    created_by_user_id uuid default auth.uid() references auth.users(id) on delete set null,
     title text not null check (char_length(trim(title)) between 1 and 160),
     body text not null default '',
     created_at timestamptz not null default now(),
@@ -18,7 +18,7 @@ create table if not exists public.campaign_dm_notes (
 create table if not exists public.campaign_npcs (
     id uuid primary key default gen_random_uuid(),
     campaign_id uuid not null references public.campaigns(id) on delete cascade,
-    created_by_user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    created_by_user_id uuid default auth.uid() references auth.users(id) on delete set null,
     name text not null check (char_length(trim(name)) between 1 and 160),
     status text not null default '',
     description text not null default '',
@@ -51,7 +51,7 @@ create table if not exists public.campaign_npc_relationships (
 create table if not exists public.campaign_entries (
     id uuid primary key default gen_random_uuid(),
     campaign_id uuid not null references public.campaigns(id) on delete cascade,
-    created_by_user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    created_by_user_id uuid default auth.uid() references auth.users(id) on delete set null,
     entry_type text not null check (entry_type in ('hook','secret','clue','quest','objective','message')),
     title text not null check (char_length(trim(title)) between 1 and 180),
     body text not null default '',
@@ -65,7 +65,7 @@ create table if not exists public.campaign_character_effects (
     id uuid primary key default gen_random_uuid(),
     campaign_id uuid not null references public.campaigns(id) on delete cascade,
     campaign_character_id uuid not null references public.campaign_characters(id) on delete cascade,
-    created_by_user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+    created_by_user_id uuid default auth.uid() references auth.users(id) on delete set null,
     name text not null check (char_length(trim(name)) between 1 and 160),
     description text not null default '',
     status text not null default 'active',
@@ -118,7 +118,7 @@ create policy did_phase8_dm_notes_select on public.campaign_dm_notes for select 
 using (private.did_is_campaign_dm(campaign_id, auth.uid()));
 create policy did_phase8_dm_notes_write on public.campaign_dm_notes for all to authenticated
 using (private.did_is_campaign_dm(campaign_id, auth.uid()))
-with check (private.did_is_campaign_dm(campaign_id, auth.uid()) and created_by_user_id = auth.uid());
+with check (private.did_is_campaign_dm(campaign_id, auth.uid()));
 
 -- NPCs are DM-private unless explicitly revealed.
 drop policy if exists did_phase8_npcs_select on public.campaign_npcs;
@@ -130,7 +130,7 @@ using (
 );
 create policy did_phase8_npcs_write on public.campaign_npcs for all to authenticated
 using (private.did_is_campaign_dm(campaign_id, auth.uid()))
-with check (private.did_is_campaign_dm(campaign_id, auth.uid()) and created_by_user_id = auth.uid());
+with check (private.did_is_campaign_dm(campaign_id, auth.uid()));
 
 -- Relationships remain DM-only in Phase 8. Visibility is stored for later player UI.
 drop policy if exists did_phase8_relationships_select on public.campaign_npc_relationships;
@@ -151,7 +151,7 @@ using (
 );
 create policy did_phase8_entries_write on public.campaign_entries for all to authenticated
 using (private.did_is_campaign_dm(campaign_id, auth.uid()))
-with check (private.did_is_campaign_dm(campaign_id, auth.uid()) and created_by_user_id = auth.uid());
+with check (private.did_is_campaign_dm(campaign_id, auth.uid()));
 
 -- Effects are visible to the DM, or to the owner of the affected character when revealed.
 drop policy if exists did_phase8_effects_select on public.campaign_character_effects;
@@ -168,7 +168,6 @@ create policy did_phase8_effects_write on public.campaign_character_effects for 
 using (private.did_is_campaign_dm(campaign_id, auth.uid()))
 with check (
     private.did_is_campaign_dm(campaign_id, auth.uid())
-    and created_by_user_id = auth.uid()
     and exists (
         select 1 from public.campaign_characters cc
         where cc.id = campaign_character_id
