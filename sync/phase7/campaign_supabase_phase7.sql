@@ -84,7 +84,12 @@ using (
 revoke all on public.party_character_state from anon, authenticated;
 grant select on public.party_character_state to authenticated;
 grant insert (campaign_character_id, campaign_id, state) on public.party_character_state to authenticated;
-grant update (state) on public.party_character_state to authenticated;
+-- PostgREST's merge-duplicates upsert updates every non-conflict column sent
+-- in the request body. campaign_id is sent on both insert and upsert, so the
+-- authenticated role needs UPDATE on it as well as state. RLS still prevents
+-- moving a row to another campaign: the WITH CHECK policy requires the
+-- campaign_id to match the owning campaign_character row.
+grant update (campaign_id, state) on public.party_character_state to authenticated;
 grant delete on public.party_character_state to authenticated;
 
 -- Keep updated_at reliable on upsert. Define the trigger function here rather
