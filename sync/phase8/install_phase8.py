@@ -11,6 +11,7 @@ REQUIRED = (
     "campaign_supabase_phase8.sql",
     "campaign_layer.js",
     "campaign_layer.css",
+    "phase8_player_ui.py",
     "test_phase8.py",
     "phase8_cloud_smoke_test.py",
 )
@@ -29,6 +30,7 @@ def find_project_root():
         if (
             (root / "frontend_2_8.py").is_file()
             and (root / "campaign_cloud.py").is_file()
+            and (root / "campaign_role_ui.py").is_file()
             and (root / "dm_dashboard" / "index.html").is_file()
         ):
             return root
@@ -71,6 +73,25 @@ def patch_dashboard_index(path: Path):
     return False
 
 
+def patch_player_campaign_ui(path: Path):
+    original = path.read_text(encoding="utf-8")
+    marker = "# Phase 8 player campaign info integration"
+    if marker in original:
+        return False
+
+    addition = '''
+
+# Phase 8 player campaign info integration
+from phase8_player_ui import apply_phase8_player_ui as _apply_phase8_player_ui
+_apply_phase8_player_ui(PlayerCampaignsDialog)
+'''
+    backup = path.with_name(path.name + ".before_phase8")
+    if not backup.exists():
+        shutil.copy2(path, backup)
+    path.write_text(original.rstrip() + addition + "\n", encoding="utf-8")
+    return True
+
+
 def main():
     support = Path(__file__).resolve().parent
     root = find_project_root()
@@ -88,8 +109,14 @@ def main():
             copied.append(str(target.relative_to(root)))
 
     index_changed = patch_dashboard_index(root / "dm_dashboard" / "index.html")
+    player_ui_changed = patch_player_campaign_ui(root / "campaign_role_ui.py")
 
-    for path in (root / "test_phase8.py", root / "phase8_cloud_smoke_test.py"):
+    for path in (
+        root / "phase8_player_ui.py",
+        root / "test_phase8.py",
+        root / "phase8_cloud_smoke_test.py",
+        root / "campaign_role_ui.py",
+    ):
         py_compile.compile(str(path), doraise=True)
     print("Python compile: PASS")
 
@@ -106,13 +133,15 @@ def main():
         raise SystemExit(result.returncode)
 
     print("\nPHASE 8 INSTALL: PASS")
-    print(f"Dashboard index patch: {'PASS' if index_changed else 'already installed'}")
+    print(f"DM Dashboard integration: {'PASS' if index_changed else 'already installed'}")
+    print(f"Player Campaign Info integration: {'PASS' if player_ui_changed else 'already installed'}")
     print("Copied: " + (", ".join(copied) if copied else "already current"))
     print("\nNEXT:")
     print("1. Run campaign_supabase_phase8.sql in Supabase SQL Editor.")
     print("2. Run: python phase8_cloud_smoke_test.py")
     print("3. Restart: python frontend_2_8.py")
-    print("4. Open Campaign Manager -> Open DM Dashboard.")
+    print("4. DM: Campaign Manager -> Open DM Dashboard.")
+    print("5. Player: My Campaigns -> Campaign Info.")
 
 
 if __name__ == "__main__":
