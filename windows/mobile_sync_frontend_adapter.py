@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 from uuid import uuid4
@@ -50,15 +51,22 @@ class DesktopSyncAdapter:
 
         state = self.storage_system.character_to_dict(character)
         if isinstance(state, dict):
-            # The phone should use the exact current desktop artwork instead of
-            # reimplementing or freezing fallback icons in Kotlin. These extra
-            # mobile-only keys never enter the .didchar save format.
             state["_mobile_ui"] = {
-                "icons": self._load_mobile_svg_assets(),
+                "icons": self._load_mobile_assets(),
             }
         return state
 
-    def _load_mobile_svg_assets(self) -> dict[str, str]:
+    @staticmethod
+    def _asset_key(value: str) -> str:
+        value = re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower())
+        return value.strip("_")
+
+    def _load_mobile_assets(self) -> dict[str, str]:
+        """Return desktop-owned artwork/help used by the Android presentation.
+
+        SVG values are base64 encoded. ``ability-help:*`` values are plain text;
+        Android only reads them as text and never sends them back as rules.
+        """
         app_dir = os.path.dirname(os.path.abspath(__file__))
         paths = {
             "agility": os.path.join(app_dir, "icons", "agility.svg"),
@@ -79,6 +87,22 @@ class DesktopSyncAdapter:
             if os.path.isfile(candidate):
                 paths["notes"] = candidate
                 break
+
+        # Improvement artwork stays authoritative on Windows. Scan the actual
+        # desktop icon directory rather than freezing a Kotlin-side mapping.
+        improvement_dir = os.path.join(app_dir, "icons", "improvements")
+        if os.path.isdir(improvement_dir):
+            for root, _dirs, files in os.walk(improvement_dir):
+                for filename in files:
+                    if not filename.lower().endswith(".svg"):
+                        continue
+                    path = os.path.join(root, filename)
+                    stem = os.path.splitext(filename)[0]
+                    key = self._asset_key(stem)
+                    if key:
+                        paths.setdefault(f"improvement:{key}", path)
+                        paths.setdefault(f"improvement-name:{key}", path)
+
         result: dict[str, str] = {}
         for key, path in paths.items():
             try:
@@ -87,21 +111,36 @@ class DesktopSyncAdapter:
                 if raw:
                     result[key] = base64.b64encode(raw).decode("ascii")
             except (OSError, ValueError):
-                # A missing custom asset should not break synchronization. The
-                # Android UI has a conservative fallback for absent artwork.
                 continue
+
+        # Supply the same desktop-owned hover/help text whenever the live stat
+        # object exposes it. Different historical desktop builds used slightly
+        # different attribute names, so accept the known presentation aliases.
+        try:
+            stats = getattr(self._character(), "stats", None)
+            for stat_key in ("agility", "finesse", "instinct", "knowledge", "presence", "strength"):
+                stat = stats.get_stat(stat_key) if stats is not None and hasattr(stats, "get_stat") else None
+                if stat is None:
+                    continue
+                help_text = None
+                for attr in ("tooltip", "tool_tip", "help_text", "description", "info", "explanation"):
+                    value = getattr(stat, attr, None)
+                    if isinstance(value, str) and value.strip():
+                        help_text = value.strip()
+                        break
+                if help_text:
+                    result[f"ability-help:{stat_key}"] = help_text
+        except Exception:
+            pass
+
         return result
 
     def command_handler(self, action: str, payload: dict, base_revision: int, request_id: str) -> Optional[dict]:
-        del base_revision, request_id  # revision validation belongs to MobileSyncServer
+        del base_revision, request_id
         self._ensure_editable()
         if not isinstance(payload, dict):
             raise MobileSyncValidationError("Command payload must be an object")
 
-        # V7 actions are kept in a small companion module so the existing
-        # finished desktop adapter remains readable and the desktop model stays
-        # authoritative. Dice is read-only; other V7 actions use the same
-        # validate/autosave/refresh path as existing mobile edits.
         try:
             from .mobile_sync_v7 import handle_mobile_v7_action
         except ImportError:
@@ -195,7 +234,6 @@ class DesktopSyncAdapter:
         if self.hooks.hp_change is not None:
             self.hooks.hp_change(delta)
             return
-
         hp = getattr(self._character(), "HP", None)
         if hp is None:
             raise MobileSyncValidationError("This character has no HP resource")
@@ -210,7 +248,6 @@ class DesktopSyncAdapter:
         if self.hooks.adversity_change is not None:
             self.hooks.adversity_change(delta)
             return
-
         adversity = getattr(self._character(), "adversity", None)
         if adversity is None:
             raise MobileSyncValidationError("This character has no Adversity Token resource")
@@ -225,7 +262,6 @@ class DesktopSyncAdapter:
         if self.hooks.ip_change is not None:
             self.hooks.ip_change(delta)
             return
-
         progression = getattr(self._character(), "progression", None)
         if progression is None:
             raise MobileSyncValidationError("This character has no Improvement Point resource")
@@ -242,18 +278,9 @@ class DesktopSyncAdapter:
         field = str(payload.get("field", "")).strip()
         character = self._character()
         if field == "name":
-            character.name = self._bounded_text(
-                payload.get("value", ""),
-                label="Character name",
-                maximum=self.MAX_NAME_CHARS,
-                strip=True,
-            )
+            character.name = self._bounded_text(payload.get("value", ""), label="Character name", maximum=self.MAX_NAME_CHARS, strip=True)
         elif field == "backstory":
-            character.backstory = self._bounded_text(
-                payload.get("value", ""),
-                label="Backstory",
-                maximum=self.MAX_BACKSTORY_CHARS,
-            )
+            character.backstory = self._bounded_text(payload.get("value", ""), label="Backstory", maximum=self.MAX_BACKSTORY_CHARS)
         else:
             raise MobileSyncValidationError(f"Identity field cannot be edited from mobile: {field}")
 
@@ -264,17 +291,8 @@ class DesktopSyncAdapter:
         return inventory
 
     def _inventory_add(self, payload: dict) -> None:
-        name = self._bounded_text(
-            payload.get("name", ""),
-            label="Item name",
-            maximum=self.MAX_NAME_CHARS,
-            strip=True,
-        )
-        description = self._bounded_text(
-            payload.get("description", ""),
-            label="Item description",
-            maximum=self.MAX_ITEM_DESCRIPTION_CHARS,
-        )
+        name = self._bounded_text(payload.get("name", ""), label="Item name", maximum=self.MAX_NAME_CHARS, strip=True)
+        description = self._bounded_text(payload.get("description", ""), label="Item description", maximum=self.MAX_ITEM_DESCRIPTION_CHARS)
         try:
             quantity = max(0, int(payload.get("quantity", 1)))
         except (TypeError, ValueError) as exc:
@@ -284,33 +302,15 @@ class DesktopSyncAdapter:
 
         inventory = self._inventory()
         item_type = self._inventory_item_type(inventory)
-        inventory.list_of_items.append(
-            item_type(
-                id=str(uuid4()),
-                name=name,
-                description=description,
-                quantity=quantity,
-                expanded=True,
-            )
-        )
+        inventory.list_of_items.append(item_type(id=str(uuid4()), name=name, description=description, quantity=quantity, expanded=True))
 
     def _inventory_update(self, payload: dict) -> None:
         item_id = self._required_id(payload)
         item = self._find_inventory_item(item_id)
-
         if "name" in payload:
-            item.name = self._bounded_text(
-                payload.get("name", ""),
-                label="Item name",
-                maximum=self.MAX_NAME_CHARS,
-                strip=True,
-            )
+            item.name = self._bounded_text(payload.get("name", ""), label="Item name", maximum=self.MAX_NAME_CHARS, strip=True)
         if "description" in payload:
-            item.description = self._bounded_text(
-                payload.get("description", ""),
-                label="Item description",
-                maximum=self.MAX_ITEM_DESCRIPTION_CHARS,
-            )
+            item.description = self._bounded_text(payload.get("description", ""), label="Item description", maximum=self.MAX_ITEM_DESCRIPTION_CHARS)
         if "quantity" in payload:
             try:
                 quantity = max(0, int(payload.get("quantity", 0)))
@@ -344,9 +344,7 @@ class DesktopSyncAdapter:
         try:
             from backend_2_1 import InventoryItem  # type: ignore
         except ImportError as exc:
-            raise MobileSyncValidationError(
-                "The desktop build cannot create inventory items from mobile"
-            ) from exc
+            raise MobileSyncValidationError("The desktop build cannot create inventory items from mobile") from exc
         return InventoryItem
 
     # ------------------------------------------------------------------
@@ -363,3 +361,7 @@ class DesktopSyncAdapter:
 
         if self.hooks.refresh_after_change is not None:
             self.hooks.refresh_after_change()
+        else:
+            refresh = getattr(self.window, "refresh_ui", None)
+            if callable(refresh):
+                refresh()
