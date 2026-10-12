@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.ArrayDeque
 
@@ -95,7 +96,7 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     fun setAdversity(value: Int) = submitCommand("resource.set", JSONObject().put("resource", "Adversity").put("value", value))
     fun setImprovementPoints(value: Int) = submitCommand("resource.set", JSONObject().put("resource", "IP").put("value", value))
 
-    // Retained for older screens/tests while V7 uses the absolute setters above.
+    // Retained for older screens/tests while V7+ uses the absolute setters above.
     fun changeHp(delta: Int) { _uiState.value.snapshot?.let { setHp((it.hp.current + delta).coerceIn(0, it.hp.max)) } }
     fun changeAdversity(delta: Int) { _uiState.value.snapshot?.let { setAdversity((it.adversity.current + delta).coerceIn(0, it.adversity.max)) } }
     fun changeImprovementPoints(delta: Int) { _uiState.value.snapshot?.let { setImprovementPoints((it.progression.currentIp + delta).coerceAtLeast(it.progression.usedIp)) } }
@@ -139,6 +140,29 @@ class DidCompanionViewModel(application: Application) : AndroidViewModel(applica
     fun rollAbility(statKey: String) = submitCommand(
         "dice.roll", JSONObject().put("mode", "ability").put("stat", statKey)
     )
+
+    /**
+     * Android sends only the user's selections. Windows re-reads the currently
+     * allowed desktop modifiers, validates the indexes and applies all dice rules.
+     */
+    fun rollAbilityWithOptions(
+        statKey: String,
+        advantageCount: Int,
+        disadvantageCount: Int,
+        optionIndexes: List<Int>,
+    ) {
+        val indexes = JSONArray()
+        optionIndexes.forEach(indexes::put)
+        submitCommand(
+            "dice.roll",
+            JSONObject()
+                .put("mode", "ability")
+                .put("stat", statKey)
+                .put("advantage_count", advantageCount)
+                .put("disadvantage_count", disadvantageCount)
+                .put("option_indexes", indexes),
+        )
+    }
 
     fun rollOtherDice(counts: Map<Int, Int>) {
         val dice = JSONObject()
