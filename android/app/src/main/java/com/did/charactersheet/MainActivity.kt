@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
                             onEditImprovement = companionViewModel::editImprovement,
                             onAdjustResources = companionViewModel::adjustResources,
                             onRollAbility = companionViewModel::rollAbility,
+                            onRollAbilityWithOptions = companionViewModel::rollAbilityWithOptions,
                             onRollOtherDice = companionViewModel::rollOtherDice,
                             onClearDiceResult = companionViewModel::clearDiceResult,
                             modifier = Modifier.weight(1f),
