@@ -1,8 +1,8 @@
 {
   "platform": "windows",
-  "version": "1.0.11",
-  "tag": "v1.0.11",
+  "version": "1.0.12",
+  "tag": "v1.0.12",
   "sync_protocol": 1,
-  "download_url": "https://github.com/almogbell/DID-Character-Sheet/releases/download/v1.0.11/DID_Character_Sheet_Setup_1.0.11.exe",
-  "release_url": "https://github.com/almogbell/DID-Character-Sheet/releases/tag/v1.0.11"
+  "download_url": "https://github.com/almogbell/DID-Character-Sheet/releases/download/v1.0.12/DID_Character_Sheet_Setup_1.0.12.exe",
+  "release_url": "https://github.com/almogbell/DID-Character-Sheet/releases/tag/v1.0.12"
 }
