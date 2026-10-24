@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; connect-src https://api.github.com; img-src 'none'">
+<title>Pocket DID — Pair or install</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <h1>Pocket DID</h1>
+  <p>Connect Pocket DID to your Windows character sheet.</p>
+  <p id="message" role="status">Checking the temporary pairing code…</p>
+  <a id="open-app" class="primary" hidden>Open Pocket DID</a>
+  <a id="install" href="https://github.com/almogbell/DID-Character-Sheet/releases" rel="noopener noreferrer">Find Pocket DID APK on GitHub Releases</a>
+  <p id="apk-info">Checking for the newest published Android APK…</p>
+  <p id="privacy">The pairing code expires. You must be on the same Wi-Fi network as the Windows computer.</p>
+  <p>Already installed? Open Pocket DID above. It checks for updates when opened from a pairing link. If a newer APK is offered, Android will ask you to approve the update. Otherwise pairing can continue immediately.</p>
+  <p>After installing or updating, scan a fresh Windows QR code if the original has expired. This page cannot inspect your installed app version or silently install APKs.</p>
+</main>
+<script src="./pair.js"></script>
+</body>
+</html>
