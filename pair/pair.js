@@ -20,7 +20,12 @@
         if (!version || !Array.isArray(release.assets)) continue;
         for (const asset of release.assets) {
           const name = String(asset.name || '');
-          if (!/\.apk$/i.test(name) || !/(pocket|android|did)/i.test(name)) continue;
+          // Releases may use the standard Gradle output name app-release.apk.
+          // Never offer debug/test/unsigned builds as production installs.
+          if (!/\.apk$/i.test(name) || /(?:debug|unsigned|test)/i.test(name)) continue;
+          const recognizable = /^(?:app-release|pocket[-_ ]?did[-_a-z0-9.]*|android[-_a-z0-9.]*|did[-_a-z0-9.]*)\.apk$/i.test(name);
+          const androidMime = String(asset.content_type || '').toLowerCase() === 'application/vnd.android.package-archive';
+          if (!recognizable && !androidMime) continue;
           let uri;
           try { uri = new URL(asset.browser_download_url); } catch (_) { continue; }
           if (uri.protocol !== 'https:' || uri.hostname !== 'github.com' ||
