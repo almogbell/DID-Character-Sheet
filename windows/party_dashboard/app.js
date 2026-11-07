@@ -193,7 +193,9 @@
     if (!sharing.abilities) return "";
     const abilities = state.abilities && typeof state.abilities === "object" ? state.abilities : {};
     const order = ["agility", "strength", "finesse", "instinct", "presence", "knowledge"];
-    return `<div class="abilities">${order.map(name => `
+    const sorted = order.map(name => ({ name, die: Number((abilities[name] || {}).die_size) || 0, bonus: Number((abilities[name] || {}).bonus) || 0 }))
+      .sort((a, b) => (b.die - a.die) || (b.bonus - a.bonus));
+    return `<div class="abilities">${sorted.map(({ name }) => `
       <div class="ability ${name}">
         <div class="ability-name">${escapeHtml(name)}</div>
         <div class="ability-die">${escapeHtml(formatDie(abilities[name]))}</div>
