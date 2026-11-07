@@ -1,0 +1,18 @@
+{
+  "name": "did-offline-dice-assets",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Build-time only: fetch pinned libraries and bundle offline DID dice assets",
+  "type": "module",
+  "scripts": {
+    "build": "node build_offline_dice.mjs"
+  },
+  "dependencies": {
+    "@3d-dice/dice-box": "1.1.4",
+    "three": "0.160.0",
+    "cannon-es": "0.20.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

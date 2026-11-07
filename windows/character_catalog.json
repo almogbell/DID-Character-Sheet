@@ -1,0 +1,1279 @@
+{
+  "schema_version": 1,
+  "stat_names": [
+    "agility",
+    "strength",
+    "finesse",
+    "instinct",
+    "presence",
+    "knowledge"
+  ],
+  "ability_arrays": [
+    {
+      "id": "adventurer",
+      "name": "Adventurer Array",
+      "description": "A balanced adventurer spread",
+      "dice": [
+        12,
+        10,
+        8,
+        8,
+        6,
+        4
+      ]
+    },
+    {
+      "id": "hybrid",
+      "name": "Hybrid Build",
+      "description": "Strong in half of the stats, weaker in the other half.",
+      "dice": [
+        12,
+        10,
+        10,
+        6,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "specialist",
+      "name": "Specialist Array",
+      "description": "Excel in two stats.",
+      "dice": [
+        12,
+        12,
+        6,
+        6,
+        6,
+        4
+      ]
+    },
+    {
+      "id": "prodigy",
+      "name": "Prodigy Build",
+      "description": "Excellent in some stats, very weak in the others.",
+      "dice": [
+        12,
+        12,
+        8,
+        4,
+        4,
+        4
+      ]
+    },
+    {
+      "id": "backbone",
+      "name": "Backbone Build",
+      "description": "One strong stat and the rest reliable.",
+      "dice": [
+        12,
+        8,
+        8,
+        8,
+        8,
+        6
+      ]
+    },
+    {
+      "id": "jack_of_all_trades",
+      "name": "Jack of All Trades",
+      "description": "Good at everything, but excels at none.",
+      "dice": [
+        10,
+        10,
+        10,
+        8,
+        6,
+        6
+      ]
+    }
+  ],
+  "improvements": {
+    "sharpshooter": {
+      "id": "sharpshooter",
+      "name": "Sharpshooter",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "range"
+      ],
+      "description": "When you use a <b>ranged or throwable weapon</b>, your current reach is: <b>{reach}</b>.\nYou can still attack farther than that, but each range step <b>beyond your current reach</b> gives the roll <b>one stack of disadvantage</b>",
+      "scaling_values": {
+        "reach": "close range"
+      },
+      "effects": [
+        {
+          "type": "set_basic_reach",
+          "weapon_types": [
+            "ranged",
+            "throwable"
+          ],
+          "range": "close"
+        }
+      ],
+      "scaling_empowerments": {
+        "reach": {
+          "name": "Reach",
+          "rule": "ordered",
+          "value_key": "reach",
+          "steps": [
+            {
+              "value": "far range",
+              "cost": 3,
+              "effects": [
+                {
+                  "type": "set_basic_reach",
+                  "weapon_types": [
+                    "ranged",
+                    "throwable"
+                  ],
+                  "range": "far"
+                }
+              ]
+            },
+            {
+              "value": "very far range",
+              "cost": 4,
+              "effects": [
+                {
+                  "type": "set_basic_reach",
+                  "weapon_types": [
+                    "ranged",
+                    "throwable"
+                  ],
+                  "range": "very_far"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "born_of_soil": {
+      "id": "born_of_soil",
+      "name": "Born of Soil",
+      "cost": 4,
+      "purchase_rule": "single",
+      "requires_choices": [
+        "attuned_land",
+        "tell"
+      ],
+      "tags": [
+        "nature",
+        "magic"
+      ],
+      "description": "You learned your magic in a place whose spirits are strong and ancient.\nWhen shapeshifting, you may take the shape of any <b>animal</b> that could <b>naturally live</b> in one of your <b>attuned lands</b>.\n<b>Regardless of your form</b>, you magically <b>retain your stats</b>.\nChoose a <b>tell</b> that marks you as born of the soil. You may spend <b>1 AT</b> to hide or suppress your tell for <b>one hour</b>.\n<b>{wild_die_text}</b>",
+      "scaling_values": {
+        "attuned_lands": "your chosen attuned land",
+        "wild_die": null,
+        "wild_die_text": ""
+      },
+      "empowerments": [
+        {
+          "id": "additional_attuned_land",
+          "name": "Additional Attuned Land",
+          "cost": 2,
+          "purchase_rule": "repeatable",
+          "requires_choices": [
+            "attuned_land"
+          ],
+          "description": "Choose <b>one additional attuned land</b>.\nWhen shapeshifting, you may also turn into animals that could <b>naturally live in that land</b>."
+        }
+      ],
+      "scaling_empowerments": {
+        "wild_die": {
+          "name": "Wild Dice",
+          "rule": "ordered",
+          "applies_to_stats": [
+            "agility",
+            "strength",
+            "instinct",
+            "finesse"
+          ],
+          "text_value_key": "wild_die_text",
+          "steps": [
+            {
+              "value": 4,
+              "cost": 2,
+              "text_value": "When you are in an <b>appropriate animal form</b>, add your current wild die: <b>d4</b>. Use it on suitable <b>Agility, Strength, Instinct, or Finesse</b> checks, with GM approval. Wild dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "wild_die",
+                  "die_size": 4
+                }
+              ]
+            },
+            {
+              "value": 6,
+              "cost": 3,
+              "text_value": "When you are in an <b>appropriate animal form</b>, add your current wild die: <b>d6</b>. Use it on suitable <b>Agility, Strength, Instinct, or Finesse</b> checks, with GM approval. Wild dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "wild_die",
+                  "die_size": 6
+                }
+              ]
+            },
+            {
+              "value": 8,
+              "cost": 4,
+              "text_value": "When you are in an <b>appropriate animal form</b>, add your current wild die: <b>d8</b>.<br>Use it on suitable <b>Agility, Strength, Instinct, or Finesse</b> checks, with GM approval. Wild dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "wild_die",
+                  "die_size": 8
+                }
+              ]
+            },
+            {
+              "value": 10,
+              "cost": 5,
+              "text_value": "When you are in an <b>appropriate animal form</b>, add your current wild die: <b>d10</b>.<br>Use it on suitable <b>Agility, Strength, Instinct, or Finesse</b> checks, with GM approval. Wild dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "wild_die",
+                  "die_size": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "wild_eyes": {
+      "id": "wild_eyes",
+      "name": "Wild Eyes",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "nature",
+        "magic",
+        "resource"
+      ],
+      "description": "When you <b>mark an animal</b> with mud, dirt, or blood.<br><b>You can see through the animal's eyes</b> as if they were your own, no matter how far away it is.<br>You may <b>only</b> <b>have one animal at a time</b>. If you mark a new animal, <b>the old mark ends</b>."
+    },
+    "wild_empathy": {
+      "id": "wild_empathy",
+      "name": "Wild Empathy",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "nature",
+        "resource"
+      ],
+      "description": "<b>You can speak with and understand animals.</b>\nYou can ask animals what they <b>saw, heard, smelled, fear, want, or know</b> from their surroundings.\nAnimals still think like animals, so their answers may be <b>simple, instinctive, or limited</b>.",
+      "empowerments": [
+        {
+          "id": "thing_talker",
+          "name": "Thing Talker",
+          "cost": 2,
+          "description": "You can also <b>speak with the spirits of objects and plants</b>.\nOld objects and plants may know useful things about their <b>surroundings or past</b>, but they only understand the world from their own limited point of view."
+        }
+      ]
+    },
+    "communion_of_whispers": {
+      "id": "communion_of_whispers",
+      "name": "Communion of Whispers",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "nature",
+        "resource"
+      ],
+      "description": "When you spend time in a place and call on the ancient spirits of the land, the GM gives you a vision that matters to you, your allies, or the spirits nearby.\nThe vision is <b>unclear</b> unless you spend <b>1 AT</b>. If you spend <b>1 AT</b>, the vision becomes <b>clear and useful</b>.",
+      "empowerments": [
+        {
+          "id": "animist",
+          "name": "Animist",
+          "cost": 2,
+          "description": "<b>Once per location</b>, you may ask for a <b>clear vision about one specific interest</b>, with GM approval.\nYou may spend <b>1 AT</b> to gain <b>one additional vision</b> in that same location."
+        }
+      ]
+    },
+    "camouflage": {
+      "id": "camouflage",
+      "name": "Camouflage",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "stealth"
+      ],
+      "description": "When you <b>stay still in natural surroundings</b>, enemies <b>cannot spot you until you move</b>, with GM approval.\nEven after you move, you have <b>advantage</b> on checks to avoid being noticed in natural surroundings."
+    },
+    "animal_buddy": {
+      "id": "animal_buddy",
+      "name": "Animal Buddy",
+      "cost": 3,
+      "purchase_rule": "single",
+      "requires_choices": [
+        "buddy_name",
+        "buddy_stat_d6",
+        "buddy_stat_d8_a",
+        "buddy_stat_d8_b",
+        "buddy_stat_d10",
+        "buddy_perk"
+      ],
+      "tags": [
+        "nature",
+        "support",
+        "rolls"
+      ],
+      "description": "You gain an <b>animal companion</b>.\nYour buddy acts like a simple player character, but it <b>does not level up or buy improvements</b>.\nWhen your buddy helps you with a check, add your current buddy die: <b>d{buddy_die}</b>.\nYour buddy has <b>{buddy_hearts} Heart(s)</b> and <b>BDV equal to half your BDV, rounded up</b>.",
+      "scaling_values": {
+        "buddy_die": 4,
+        "buddy_hearts": 1
+      },
+      "creates": {
+        "type": "companion",
+        "key": "animal_buddy",
+        "default_hearts": 1,
+        "buddy_die": 4,
+        "bdv_rule": "half_owner_bdv_rounded_up",
+        "stat_array": [
+          10,
+          8,
+          8,
+          6,
+          4,
+          4
+        ]
+      },
+      "effects": [
+        {
+          "type": "set_bonus_die",
+          "key": "buddy_die",
+          "die_size": 4
+        }
+      ],
+      "empowerment_groups": {
+        "training": {
+          "id": "training",
+          "name": "Training",
+          "rule": "any",
+          "options": [
+            {
+              "id": "well_trained",
+              "requires_choices": [
+                "buddy_training_stat"
+              ],
+              "name": "Well Trained",
+              "cost": 1,
+              "description": "Choose one of your buddy's abilities and increase its static bonus by <b>+1</b>. The first bonus to an ability costs <b>1 IP</b>, the second costs <b>2 IP</b>, then <b>3 IP</b>, and so on."
+            },
+            {
+              "id": "gifted",
+              "name": "Gifted",
+              "cost": 2,
+              "requires_choices": [
+                "buddy_perk"
+              ],
+              "description": "Choose <b>an additional perk</b> for your buddy."
+            }
+          ]
+        }
+      },
+      "scaling_empowerments": {
+        "buddy_hearts": {
+          "name": "Extra Heart",
+          "rule": "repeatable_scaling",
+          "max_times": 3,
+          "base_cost": 2,
+          "cost_increase": 1,
+          "value_key": "buddy_hearts",
+          "increase_by": 1,
+          "description": "Your Animal Buddy gains <b>1 additional Heart</b>.",
+          "effects": [
+            {
+              "type": "companion_add_heart",
+              "companion_key": "animal_buddy",
+              "amount": 1
+            }
+          ]
+        }
+      }
+    },
+    "martial_feats": {
+      "id": "martial_feats",
+      "name": "Martial Feats",
+      "cost": 3,
+      "purchase_rule": "single",
+      "tags": [
+        "might",
+        "rolls"
+      ],
+      "description": "When you roll with a weapon and declare a martial deed, add your current <b>Martial Die: d{martial_die}</b>.\nIf the martial die rolls <b>3 or higher</b>, you may impose a <b>reasonable deed, condition, or narrative consequence</b>, with GM approval.\nThe effect usually lasts <b>until the start of your side's next turn</b>. Martial dice <b>do not explode</b>.",
+      "scaling_values": {
+        "martial_die": 4
+      },
+      "effects": [
+        {
+          "type": "set_bonus_die",
+          "key": "martial_die",
+          "die_size": 4
+        }
+      ],
+      "scaling_empowerments": {
+        "martial_die": {
+          "name": "Martial Die",
+          "rule": "ordered",
+          "value_key": "martial_die",
+          "steps": [
+            {
+              "value": 6,
+              "cost": 3,
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "martial_die",
+                  "die_size": 6
+                }
+              ]
+            },
+            {
+              "value": 8,
+              "cost": 4,
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "martial_die",
+                  "die_size": 8
+                }
+              ]
+            },
+            {
+              "value": 10,
+              "cost": 5,
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "martial_die",
+                  "die_size": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "shoot_first": {
+      "id": "shoot_first",
+      "name": "Shoot First",
+      "cost": 3,
+      "purchase_rule": "single",
+      "tags": [
+        "stealth"
+      ],
+      "description": "You are <b>never caught by surprise</b>. When an enemy would get the drop on you, <b>you get to act first</b> instead."
+    },
+    "trap_expert": {
+      "id": "trap_expert",
+      "name": "Trap Expert",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "When you survey a dangerous area, you may ask the GM <b>one honest question</b> about traps, hazards, or environmental dangers. You may <b>spend AT to ask additional questions</b>, if the GM agrees they are relevant."
+    },
+    "sneak_attack": {
+      "id": "sneak_attack",
+      "name": "Sneak Attack",
+      "cost": 3,
+      "purchase_rule": "single",
+      "tags": [
+        "stealth"
+      ],
+      "description": "When you hit an enemy who is <b>surprised, distracted, or otherwise exposed</b>, choose <b>one Sneak Attack effect</b>.\nYou may choose <b>one additional effect for each AT you spend</b>.\n\nBase effects:\n- They have some sort of <b>disadvantage on their next turn</b>.\n- You create some sort of <b>advantage</b> you or an ally can act on.\n- You <b>slip into a hiding place immediately after the attack</b>, with GM approval.\n- You deal <b>extra HP of damage</b> to the target.\n\nYour current extra damage option deals <b>+{sneak_attack_damage} HP damage</b>.\nThe exact effect must fit the attack, the target, and the situation.",
+      "scaling_values": {
+        "sneak_attack_damage": 1
+      },
+      "empowerment_groups": {
+        "extra_effects": {
+          "id": "extra_effects",
+          "name": "Additional Sneak Attack Effects",
+          "rule": "any",
+          "options": [
+            {
+              "id": "hobbled",
+              "name": "Hobbled",
+              "cost": 1,
+              "description": "Add this option to your Sneak Attack effect list:\nThe target is <b>hobbled and slow-moving</b>. The range they can move is <b>reduced by one range level</b>."
+            },
+            {
+              "id": "drop_item",
+              "name": "Drop Item",
+              "cost": 1,
+              "description": "Add this option to your Sneak Attack effect list:\nThe target <b>drops anything they are holding</b>."
+            },
+            {
+              "id": "drooling",
+              "name": "Stunned and Drooling",
+              "cost": 1,
+              "description": "Add this option to your Sneak Attack effect list:\nThe target does nothing but stand and drool for a few moments. They <b>cannot act on their side's next turn</b>."
+            }
+          ]
+        }
+      },
+      "scaling_empowerments": {
+        "sneak_attack_damage": {
+          "name": "Sneak Attack Damage",
+          "rule": "repeatable_scaling",
+          "max_times": 3,
+          "base_cost": 2,
+          "cost_increase": 1,
+          "value_key": "sneak_attack_damage",
+          "increase_by": 1,
+          "description": "Your current Sneak Attack extra damage option deals +{sneak_attack_damage} HP damage.\nYou only use this when you choose the <b>extra damage effect</b>.",
+          "effects": [
+            {
+              "type": "increase_sneak_attack_damage",
+              "amount": 1
+            }
+          ]
+        }
+      }
+    },
+    "spin_attack": {
+      "id": "spin_attack",
+      "name": "Spin Attack",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "multi_target"
+      ],
+      "description": "Spend <b>1 AT</b> to make <b>one combat roll against all enemies within melee range</b>. On each target you hit, either <b>inflict a status effect</b> or <b>deal damage</b>."
+    },
+    "trick_shot": {
+      "id": "trick_shot",
+      "name": "Trick Shot",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "range"
+      ],
+      "description": "Spend <b>1 AT</b> to target a location with a ranged weapon <b>without direct line of sight</b>, if you have line of sight to a bounce point. Add <b>one extra bounce per extra AT spent</b>."
+    },
+    "blow_out_the_sun": {
+      "id": "blow_out_the_sun",
+      "name": "Blow Out the Sun",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "range",
+        "multi_target"
+      ],
+      "description": "When you volley with a ranged weapon, <b>spend AT before rolling</b>. For each AT spent, choose <b>one extra target</b>. <b>Roll once and apply damage to all targets</b>."
+    },
+    "healer": {
+      "id": "healer",
+      "name": "Healer",
+      "cost": 4,
+      "purchase_rule": "single",
+      "tags": [
+        "healing",
+        "magic",
+        "support"
+      ],
+      "description": "By touching someone skin to skin and channeling magic, you may heal them.\nYour current healing amount is <b>{healing_dice} damage levels</b>, or <b>{halved_hp} halved HP</b>, or <b>one narrative injury</b>.\nYou may heal each person <b>once per long rest</b>. To heal the same person again before the next long rest, spend <b>{repeat_healing_cost} AT</b>.\nYou also have <b>advantage when stabilizing dying creatures</b>.",
+      "scaling_values": {
+        "healing_dice": "1d6",
+        "halved_hp": 3,
+        "repeat_healing_cost": 3
+      },
+      "scaling_empowerments": {
+        "repeat_healing_cost": {
+          "name": "Repeat Healing Cost",
+          "rule": "ordered",
+          "steps": [
+            {
+              "value": 2,
+              "cost": 2,
+              "effects": [
+                {
+                  "type": "set_action_cost",
+                  "action_id": "repeat_healing",
+                  "cost": 2
+                }
+              ]
+            },
+            {
+              "value": 1,
+              "cost": 3,
+              "effects": [
+                {
+                  "type": "set_action_cost",
+                  "action_id": "repeat_healing",
+                  "cost": 1
+                }
+              ]
+            }
+          ]
+        },
+        "healing_dice": {
+          "name": "Healing Amount",
+          "rule": "ordered",
+          "updates": {
+            "2": {
+              "healing_dice": "2d6",
+              "halved_hp": 6
+            },
+            "3": {
+              "healing_dice": "3d6",
+              "halved_hp": 9
+            }
+          },
+          "steps": [
+            {
+              "value": 2,
+              "cost": 3,
+              "effects": [
+                {
+                  "type": "set_healing_die_count",
+                  "amount": 2
+                }
+              ]
+            },
+            {
+              "value": 3,
+              "cost": 4,
+              "effects": [
+                {
+                  "type": "set_healing_die_count",
+                  "amount": 3
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "physician": {
+      "id": "physician",
+      "name": "Physician",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "healing",
+        "support"
+      ],
+      "description": "Given enough time and supplies, you can medically treat any creature you <b>understand</b>.Clear an <b>additional 2 HP during a rest, once per person each day cycle</b>.You have <b>advantage</b> when stabilizing dying creatures.",
+      "effects": [
+        {
+          "type": "rest_healing_bonus",
+          "amount": 2
+        }
+      ]
+    },
+    "hearty": {
+      "id": "hearty",
+      "name": "Hearty",
+      "cost": 2,
+      "purchase_rule": "repeatable_scaling",
+      "max_times": 3,
+      "base_cost": 2,
+      "cost_increase": 1,
+      "base_value": 1,
+      "increase_by": 1,
+      "value_key": "hp_per_heart",
+      "tags": [
+        "might"
+      ],
+      "description": "Gain <b>+{hp_per_heart} HP for every heart</b> you have or gain.",
+      "effects": [
+        {
+          "type": "max_hp_per_heart",
+          "amount": 1
+        }
+      ]
+    },
+    "deity": {
+      "id": "deity",
+      "name": "Deity",
+      "cost": 2,
+      "purchase_rule": "single",
+      "requires_choices": [
+        "deity_name",
+        "deity_domain"
+      ],
+      "tags": [
+        "magic",
+        "resource"
+      ],
+      "description": "After quiet communion with your deity, you gain useful knowledge. When petitioning according to your religion, <b>spend AT</b> to be granted a boon related to your deity's domain. More AT means a greater boon."
+    },
+    "minstrel": {
+      "id": "minstrel",
+      "name": "Minstrel",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "You are a traveling scholar or performer. In civilized settlements, <b>someone may host you</b>. At important locations, ask the GM for <b>one historical fact</b> you heard in a tale or book."
+    },
+    "prestidigitation": {
+      "id": "prestidigitation",
+      "name": "Prestidigitation",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "magic"
+      ],
+      "description": "Perform <b>minor true magic</b>. Touch an item to <b>cosmetically alter it</b>, or create <b>crude minor illusions no bigger than yourself</b>."
+    },
+    "spellcasting": {
+      "id": "spellcasting",
+      "name": "Spellcasting",
+      "cost": 4,
+      "purchase_rule": "single",
+      "requires_choices": [
+        "magic_school",
+        "magic_school_description"
+      ],
+      "tags": [
+        "magic",
+        "rolls"
+      ],
+      "description": "Choose a <b>spellcasting stat</b> and a <b>school of magic</b>.\nYou may <b>cast spells and make magic rolls</b> using that stat and school.\n{magic_die_text}\nMagic has <b>range, target, and effect limits</b>, and the spell must <b>fit your school</b>.",
+      "scaling_values": {
+        "magic_die": null,
+        "magic_die_text": ""
+      },
+      "scaling_empowerments": {
+        "magic_die": {
+          "name": "Magic Die",
+          "rule": "ordered",
+          "text_value_key": "magic_die_text",
+          "steps": [
+            {
+              "value": 4,
+              "cost": 3,
+              "text_value": "When you make a magic roll using your chosen spellcasting stat and school, add your current magic die. Magic dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_die",
+                  "die_size": 4
+                }
+              ]
+            },
+            {
+              "value": 6,
+              "cost": 4,
+              "text_value": "When you make a magic roll using your chosen spellcasting stat and school, add your current. Magic dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_die",
+                  "die_size": 6
+                }
+              ]
+            },
+            {
+              "value": 8,
+              "cost": 5,
+              "text_value": "When you make a magic roll using your chosen spellcasting stat and school, add your current magic die. Magic dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_die",
+                  "die_size": 8
+                }
+              ]
+            },
+            {
+              "value": 10,
+              "cost": 6,
+              "text_value": "When you make a magic roll using your chosen spellcasting stat and school, add your current magic die. Magic dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_die",
+                  "die_size": 10
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "empowerment_groups": {
+        "school_savant": {
+          "id": "school_savant",
+          "name": "School Savant",
+          "rule": "repeatable_scaling",
+          "base_cost": 2,
+          "cost_increase": 1,
+          "requires_choices": [
+            "magic_school",
+            "magic_school_description"
+          ],
+          "description": "Choose <b>one additional school of magic</b>. You may cast spells from that school using your spellcasting rules. This can be <b>bought more than once</b>. <b>Each new school costs more than the last.</b>"
+        }
+      },
+      "empowerments": [
+        {
+          "id": "harm_slinger",
+          "name": "Harm Slinger",
+          "cost": 2,
+          "tags": [
+            "magic",
+            "multi_target",
+            "range"
+          ],
+          "description": "When casting on an <b>unwilling living being</b>, you may <b>spend AT</b> to add options such as <b>more area</b>, <b>more range</b>, or <b>damage + effect</b>. The spell must still fit your school, target, and situation."
+        },
+        {
+          "id": "expert_enchanter",
+          "name": "Expert Enchanter",
+          "cost": 2,
+          "tags": [
+            "magic",
+            "multi_target",
+            "range",
+            "support"
+          ],
+          "description": "When casting on a <b>willing living being</b> or an object, you may <b>spend AT</b> to add options such as <b>more area</b>, <b>more range</b>, or <b>longer duration</b>. The spell must still fit your school, target, and situation."
+        }
+      ]
+    },
+    "magic_novice": {
+      "id": "magic_novice",
+      "name": "Magic Novice",
+      "cost": 2,
+      "purchase_rule": "single",
+      "requires_choices": [
+        "specific_magic_effect"
+      ],
+      "tags": [
+        "magic",
+        "rolls"
+      ],
+      "description": "Choose <b>one specific magical ability</b> you can perform.\n{magic_die_text}",
+      "scaling_values": {
+        "magic_die": null,
+        "magic_die_text": ""
+      },
+      "empowerments": [
+        {
+          "id": "upgrade_to_spellcasting",
+          "name": "Upgrade to Spellcasting",
+          "cost": 2,
+          "requires_choices": [
+            "magic_school",
+            "magic_school_description"
+          ],
+          "description": "<b>Replace Magic Novice with full Spellcasting.</b> Keep your relevant spellcasting choice where possible, then choose a <b>magic school</b>. Any matching Magic Novice magic die upgrades should become the <b>matching Spellcasting magic die upgrades</b>.",
+          "effects": [
+            {
+              "type": "replace_improvement",
+              "remove": "magic_novice",
+              "add": "spellcasting",
+              "requires_new_choices": [
+                "magic_school",
+                "magic_school_description"
+              ],
+              "convert_improvements": [
+                {
+                  "from_group": "magic_die",
+                  "from_key": "magic_novice_die",
+                  "to_group": "magic_die",
+                  "to_key": "magic_die",
+                  "id_map": {
+                    "magic_novice_die_d4": "magic_die_d4",
+                    "magic_novice_die_d6": "magic_die_d6",
+                    "magic_novice_die_d8": "magic_die_d8",
+                    "magic_novice_die_d10": "magic_die_d10"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "scaling_empowerments": {
+        "magic_die": {
+          "name": "Magic Die",
+          "rule": "ordered",
+          "text_value_key": "magic_die_text",
+          "steps": [
+            {
+              "value": 4,
+              "cost": 3,
+              "text_value": "Gain a <b>d4</b> Magic Die. Magic Dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_novice_die",
+                  "die_size": 4
+                }
+              ]
+            },
+            {
+              "value": 6,
+              "cost": 4,
+              "text_value": "Increase your Magic Die to <b>d6</b>. Magic Dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_novice_die",
+                  "die_size": 6
+                }
+              ]
+            },
+            {
+              "value": 8,
+              "cost": 5,
+              "text_value": "Increase your Magic Die to <b>d8</b>. Magic Dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_novice_die",
+                  "die_size": 8
+                }
+              ]
+            },
+            {
+              "value": 10,
+              "cost": 6,
+              "text_value": "Increase your Magic Die to <b>d10</b>. Magic Dice <b>do not explode</b>.",
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "magic_novice_die",
+                  "die_size": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "eye_for_weakness": {
+      "id": "eye_for_weakness",
+      "name": "Eye for Weakness",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "Spend <b>1 AT</b> to ask the GM what here is <b>weak or vulnerable</b>. They <b>answer honestly</b>. Attacking the weak area gives <b>advantage</b> and <b>+1 HP damage</b>."
+    },
+    "wide_wanderer": {
+      "id": "wide_wanderer",
+      "name": "Wide-Wanderer",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "When you arrive somewhere, ask the GM about <b>important traditions, rituals, or customs</b>, and they tell you <b>what you need to know</b>."
+    },
+    "mighty": {
+      "id": "mighty",
+      "name": "Mighty",
+      "cost": 3,
+      "purchase_rule": "single",
+      "tags": [
+        "might",
+        "rolls"
+      ],
+      "description": "Whenever you make a <b>physical effort stat check</b>, add your current Mighty die: <b>d{mighty_die}</b>.\nThis applies to forceful physical actions such as <b>lifting, breaking, pushing, climbing, holding, wrestling</b>, or other athletic challenges, with GM approval.\nYou may also <b>treat one athletic challenge as lesser</b> when appropriate. Mighty dice <b>do not explode</b>.",
+      "scaling_values": {
+        "mighty_die": 4
+      },
+      "effects": [
+        {
+          "type": "set_bonus_die",
+          "key": "mighty_die",
+          "die_size": 4
+        }
+      ],
+      "scaling_empowerments": {
+        "mighty_die": {
+          "id": "mighty_die",
+          "name": "Mighty Die",
+          "rule": "ordered",
+          "value_key": "mighty_die",
+          "steps": [
+            {
+              "value": 6,
+              "cost": 2,
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "mighty_die",
+                  "die_size": 6
+                }
+              ]
+            },
+            {
+              "value": 8,
+              "cost": 3,
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "mighty_die",
+                  "die_size": 8
+                }
+              ]
+            },
+            {
+              "value": 10,
+              "cost": 4,
+              "effects": [
+                {
+                  "type": "set_bonus_die",
+                  "key": "mighty_die",
+                  "die_size": 10
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "torturer": {
+      "id": "torturer",
+      "name": "Torturer",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "rolls",
+        "might"
+      ],
+      "description": "When you parley using <b>threats of impending violence</b> as leverage, you have <b>advantage</b>."
+    },
+    "berserker": {
+      "id": "berserker",
+      "name": "Berserker",
+      "cost": 2,
+      "purchase_rule": "repeatable_scaling",
+      "max_times": 3,
+      "base_cost": 2,
+      "cost_increase": 1,
+      "base_value": 1,
+      "increase_by": 1,
+      "value_key": "extra_at_from_damage",
+      "tags": [
+        "might"
+      ],
+      "description": "Whenever you gain AT from taking damage, gain <b>+{extra_at_from_damage} additional AT</b>."
+    },
+    "reckless_attack": {
+      "id": "reckless_attack",
+      "name": "Reckless Attack",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "might",
+        "rolls"
+      ],
+      "description": "On your turn, you can choose to attack recklessly to gain advantage on melee attack rolls this turn. However, attack rolls against you have advantage until your next turn."
+    },
+    "shared_pain": {
+      "id": "shared_pain",
+      "name": "Shared Pain",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "healing",
+        "support"
+      ],
+      "description": "Clear <b>any amount of marked HP from an ally</b> by marking the <b>same amount of HP on yourself</b>.\n        When you mark damage in this way you get AT as with all other damage"
+    },
+    "piercer": {
+      "id": "piercer",
+      "name": "Piercer",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "range",
+        "multi_target"
+      ],
+      "description": "Spend <b>1 AT</b> to make a combat roll against <b>all enemies in a very close line</b> from you. On each hit, <b>inflict disadvantage</b> or <b>deal damage</b>."
+    },
+    "baller": {
+      "id": "baller",
+      "name": "Baller",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "range",
+        "multi_target"
+      ],
+      "description": "Spend <b>1 AT</b> to create a <b>very close radius sphere within close range</b>. Roll against <b>all creatures inside, including allies</b>. On each hit, <b>inflict disadvantage</b> or <b>deal damage</b>."
+    },
+    "martyr": {
+      "id": "martyr",
+      "name": "Martyr",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "support",
+        "range"
+      ],
+      "description": "When using the <b>protect action</b>, you may protect an ally in <b>close range</b> instead of only <b>very close range</b>."
+    },
+    "defender": {
+      "id": "defender",
+      "name": "Defender",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "support",
+        "range"
+      ],
+      "description": "When using the <b>parry action</b>, you may use it on allies within your current parry range: <b>{parry_range}</b>.",
+      "scaling_values": {
+        "parry_range": "very close range"
+      },
+      "scaling_empowerments": {
+        "parry_range": {
+          "name": "Parry Range",
+          "rule": "ordered",
+          "value_key": "parry_range",
+          "steps": [
+            {
+              "value": "close range",
+              "cost": 2
+            },
+            {
+              "value": "far range",
+              "cost": 3
+            },
+            {
+              "value": "very far range",
+              "cost": 4
+            }
+          ]
+        }
+      }
+    },
+    "heightened_ability": {
+      "id": "heightened_ability",
+      "name": "Heightened Ability",
+      "cost": 1,
+      "purchase_rule": "stat_bonus_scaling",
+      "requires_choices": [
+        "stat_name"
+      ],
+      "tags": [
+        "rolls"
+      ],
+      "description": "Gain a <b>static bonus to one stat</b>. <b>+1 costs 1 IP</b>. To increase to +2, first have +1 then spend <b>2 IP</b>, and so on.",
+      "effects": [
+        {
+          "type": "increase_stat_bonus",
+          "amount": 1
+        }
+      ]
+    },
+    "high_flier": {
+      "id": "high_flier",
+      "name": "High Flier",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "range"
+      ],
+      "description": "You can <b>fly</b> using biological or magical means."
+    },
+    "intuitive": {
+      "id": "intuitive",
+      "name": "Intuitive",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "Spend <b>1 AT</b> to ask the GM about your <b>surroundings, an NPC, or similar</b>. The GM <b>must answer honestly</b>."
+    },
+    "lucky": {
+      "id": "lucky",
+      "name": "Lucky",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "rolls"
+      ],
+      "description": "Spend <b>2 AT</b> to <b>reroll a stat check</b>."
+    },
+    "nerves_of_steel": {
+      "id": "nerves_of_steel",
+      "name": "Nerves of Steel",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "rolls",
+        "might"
+      ],
+      "description": "Spend <b>1 AT</b> to take <b>half of your die's value instead of rolling</b> on a <b>Snap Decision</b>."
+    },
+    "skilled_at": {
+      "id": "skilled_at",
+      "name": "Skilled At...",
+      "cost": 1,
+      "purchase_rule": "repeatable",
+      "requires_choices": [
+        "skill_name",
+        "skill_description"
+      ],
+      "tags": [
+        "rolls"
+      ],
+      "description": "Choose a <b>non-combat skill</b> with the GM. You <b>succeed on moderately difficult checks, 9 or less</b>, and may add <b>up to +3 on harder checks</b>. <b>Does not stack</b> with other improvement bonuses."
+    },
+    "treasure_hunter": {
+      "id": "treasure_hunter",
+      "name": "Treasure Hunter",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "Spend <b>1 AT</b> to find a <b>useful item</b> in your surroundings."
+    },
+    "stealthy": {
+      "id": "stealthy",
+      "name": "Stealthy",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "stealth"
+      ],
+      "description": "Spend <b>1 AT</b> to <b>avoid being seen</b>, within reason and GM discretion."
+    },
+    "utility_belt": {
+      "id": "utility_belt",
+      "name": "Utility Belt",
+      "cost": 2,
+      "purchase_rule": "single",
+      "tags": [
+        "resource"
+      ],
+      "description": "Spend 1 AT to just happen to have one <b>commonplace</b> item with you, at GM discretion."
+    },
+    "spirited_motivator": {
+      "id": "spirited_motivator",
+      "name": "Spirited Motivator",
+      "cost": 1,
+      "purchase_rule": "single",
+      "tags": [
+        "support",
+        "rolls"
+      ],
+      "description": "When helping a crewmate, <b>each AT you spend gives +2 instead of +1</b>. You may <b>spend AT to help when absent</b> if they describe a previous pep talk."
+    },
+    "custom": {
+      "id": "custom",
+      "name": "Custom Improvement...",
+      "cost": 0,
+      "purchase_rule": "repeatable",
+      "description": "Create an improvement with a custom name, description, and IP cost."
+    }
+  }
+}

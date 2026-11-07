@@ -1,0 +1,38 @@
+DID Character Sheet - Simple Update Protocol
+
+1. Finish and test the code.
+
+2. Run:
+   python run_all_did_tests.py
+
+3. Change the version number in frontend_2_8.py:
+   APP_VERSION = "NEW VERSION"
+
+4. Change the version number in:
+   DID_Character_Sheet_Installer_with_icon.iss
+
+5. Build the EXE:
+   pyinstaller --clean --noconfirm DID_Character_Sheet.spec
+
+6. Open and test:
+   dist\DID Character Sheet.exe
+
+7. Open the .iss file in Inno Setup and choose:
+   Build -> Compile
+
+8. Run the new installer and make sure it updates the existing program correctly.
+
+9. Create a new GitHub Release:
+   Tag: vNEW.VERSION
+
+10. Upload the new installer:
+    DID_Character_Sheet_Setup_NEW.VERSION.exe
+
+11. Publish the GitHub Release.
+
+12. Open the previous version and check:
+    Tools -> Update Available
+
+13. Install the update and make sure the new version opens correctly.
+
+DONE.

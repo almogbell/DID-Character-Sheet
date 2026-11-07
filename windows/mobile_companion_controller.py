@@ -1,11 +1,4 @@
-"""High-level installer/controller for Phase 8 mobile companion support.
-
-The controller keeps finished-frontend changes intentionally small. It owns the
-adapter/server/dialog, watches canonical desktop character state for changes,
-and injects a Mobile Companion action into the existing DID Tools menu when that
-menu is shown.
-"""
-
+"""Connect the finished Windows DID UI to the Android sync server."""
 from __future__ import annotations
 
 import hashlib
@@ -17,40 +10,34 @@ from PySide6.QtCore import QEvent, QObject, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QMenu
 
-try:  # package imports used by tests / repository tooling
+try:
     from .mobile_companion_dialog import MobileCompanionDialog
     from .mobile_sync_frontend_adapter import DesktopSyncAdapter, FrontendHooks
     from .mobile_sync_server import MobileSyncServer
-except ImportError:  # sibling imports used by the packaged desktop app
+except ImportError:
     from mobile_companion_dialog import MobileCompanionDialog
     from mobile_sync_frontend_adapter import DesktopSyncAdapter, FrontendHooks
     from mobile_sync_server import MobileSyncServer
 
 
 def normalize_menu_text(text: str) -> str:
-    """Normalize Qt mnemonic markers without depending on a QWidget instance."""
     return str(text).replace("&", "").strip()
 
 
 def is_did_tools_menu(action_texts: Iterable[str]) -> bool:
-    """Return True only for the DID Tools menu signature used by 1.0.10+."""
     texts = {normalize_menu_text(text) for text in action_texts}
-    # The finished 1.0.10 frontend no longer has a permanent "Check for
-    # Updates" row. It appears only when an update is actually available, so it
-    # cannot be used as the menu signature. These three actions are stable.
-    required = {"New Character", "Load Character", "Edit Abilities"}
-    return required.issubset(texts)
+    return {"New Character", "Load Character", "Edit Abilities"}.issubset(texts)
 
 
-def mobile_companion_insert_index(action_texts: Iterable[str]) -> Optional[int]:
-    """Return where Mobile Companion belongs, or None when it should not be added."""
+def mobile_companion_insert_index(
+    action_texts: Iterable[str],
+) -> Optional[int]:
     texts = [normalize_menu_text(text) for text in action_texts]
-    if not is_did_tools_menu(texts) or MobileCompanionController.TOOLS_ACTION_TEXT in texts:
+    if (
+        not is_did_tools_menu(texts)
+        or MobileCompanionController.TOOLS_ACTION_TEXT in texts
+    ):
         return None
-
-    # Keep Mobile Companion with the character-management/editing commands and
-    # before the Dice Roller submenu. Fall back to the optional update row, then
-    # to the end of the menu for future frontend variations.
     for anchor in ("Dice Roller", "Update Available", "Check for Updates"):
         try:
             return texts.index(anchor)
@@ -65,12 +52,6 @@ def insert_menu_action(
     text: str,
     callback,
 ) -> QAction:
-    """Insert a QAction safely across supported PySide6 versions.
-
-    QWidget.insertAction() requires an actual QAction object. Passing a string
-    works with QMenu.addAction(), but not with insertAction(). Keeping this in a
-    tiny helper also gives the integration tests a direct regression target.
-    """
     action = QAction(text, menu)
     action.triggered.connect(callback)
     if before is not None:
@@ -81,9 +62,7 @@ def insert_menu_action(
 
 
 class MobileCompanionController(QObject):
-    """Bind a finished DID main window to the Phase 8 sync transport."""
-
-    POLL_INTERVAL_MS = 500
+    POLL_INTERVAL_MS = 1100  # UI hooks provide immediate updates; fallback poll is lightweight.
     TOOLS_ACTION_TEXT = "Mobile Companion"
 
     def __init__(
@@ -101,10 +80,14 @@ class MobileCompanionController(QObject):
         if hooks is None:
             refresh = getattr(window, "refresh_all", None)
             hooks = FrontendHooks(
-                refresh_after_change=refresh if callable(refresh) else None,
+                refresh_after_change=(refresh if callable(refresh) else None),
             )
 
-        self.adapter = DesktopSyncAdapter(window, storage_system, hooks=hooks)
+        self.adapter = DesktopSyncAdapter(
+            window,
+            storage_system,
+            hooks=hooks,
+        )
         self.server = MobileSyncServer(
             desktop_version=app_version,
             state_provider=self.adapter.state_provider,
@@ -116,29 +99,30 @@ class MobileCompanionController(QObject):
         self._last_character_id: Optional[str] = None
         self._event_filter_installed = False
         self._shutdown = False
+        self._last_phone_count: Optional[int] = None
+        self._last_phone_devices: frozenset[str] = frozenset()
+        self._last_phone_label = None
 
-        # Paired phones must be able to reconnect as soon as the Windows app
-        # starts, without requiring the user to open the pairing dialog first.
+        # The signal is emitted after authentication/disconnect by the
+        # WebSocket server. Always re-read the live sockets, not a cached
+        # pairing count or a possibly stale signal argument.
+        self.server.clientCountChanged.connect(self._refresh_phone_status)
         self.server.start()
+        self._refresh_phone_status()
         self._capture_baseline()
 
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(self.POLL_INTERVAL_MS)
         self._poll_timer.timeout.connect(self._poll_desktop_state)
+        # A connection may be restored without a count-change event (e.g.
+        # reconnect after a dropped socket). Keep the top-bar badge current.
+        self._poll_timer.timeout.connect(self._refresh_phone_status)
         self._poll_timer.start()
 
-        # Avoid forcing the finished frontend's existing toggle_tools_menu()
-        # implementation to be rewritten. Its QMenu is parented to the main
-        # window; when it is shown we recognize it by its normal DID actions and
-        # add Mobile Companion once. The explicit frontend patch also adds the
-        # row, so this remains only a compatibility fallback.
         app = QApplication.instance()
         if install_tools_event_filter and app is not None:
             app.installEventFilter(self)
             self._event_filter_installed = True
-
-        # The finished frontend can keep its existing closeEvent unchanged.
-        # Clean shutdown is tied to the QApplication lifetime instead.
         if app is not None:
             app.aboutToQuit.connect(self.shutdown)
 
@@ -151,11 +135,9 @@ class MobileCompanionController(QObject):
         self._dialog.activateWindow()
 
     def desktop_state_changed(self) -> None:
-        """Optional explicit notification; polling already covers this path."""
         self._capture_and_broadcast(force_character_event=False)
 
     def active_character_changed(self) -> None:
-        """Optional explicit notification; polling already covers this path."""
         self._capture_and_broadcast(force_character_event=True)
 
     def shutdown(self) -> None:
@@ -169,29 +151,28 @@ class MobileCompanionController(QObject):
             self._event_filter_installed = False
         self.server.stop()
 
-    # ------------------------------------------------------------------
-    # Existing Tools menu integration
-    # ------------------------------------------------------------------
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.Show and isinstance(watched, QMenu):
             try:
                 self._maybe_add_tools_action(watched)
             except Exception:
-                # Never let a compatibility-menu fallback disrupt the desktop
-                # app. The explicit frontend row remains the primary path.
                 traceback.print_exc()
         return super().eventFilter(watched, event)
 
     def _maybe_add_tools_action(self, menu: QMenu) -> None:
         if menu.parent() is not self.window:
             return
-
         actions = list(menu.actions())
-        insertion_index = mobile_companion_insert_index(action.text() for action in actions)
+        insertion_index = mobile_companion_insert_index(
+            action.text() for action in actions
+        )
         if insertion_index is None:
             return
-
-        before = actions[insertion_index] if insertion_index < len(actions) else None
+        before = (
+            actions[insertion_index]
+            if insertion_index < len(actions)
+            else None
+        )
         insert_menu_action(
             menu,
             before,
@@ -199,31 +180,34 @@ class MobileCompanionController(QObject):
             self.show_dialog,
         )
 
-    # ------------------------------------------------------------------
-    # Mobile command path
-    # ------------------------------------------------------------------
     def _handle_mobile_command(
         self,
         action: str,
         payload: dict,
         base_revision: int,
         request_id: str,
-    ) -> None:
-        self.adapter.command_handler(action, payload, base_revision, request_id)
-        # MobileSyncServer will increment/broadcast immediately after this
-        # callback returns. Capture the new signature here so the poller does
-        # not interpret the same mobile mutation as a second desktop mutation.
+    ) -> Optional[dict]:
+        result = self.adapter.command_handler(
+            action,
+            payload,
+            base_revision,
+            request_id,
+        )
         self._capture_baseline()
+        return result
 
-    # ------------------------------------------------------------------
-    # Desktop-originated state watcher
-    # ------------------------------------------------------------------
     def _poll_desktop_state(self) -> None:
-        if not self.server.is_listening():
+        # Reconnecting Android clients receive a canonical state in hello_ok.
+        # Avoid serializing the entire character ~2 times/sec while offline.
+        if not self.server.is_listening() or not self.server.connected_device_ids():
             return
         self._capture_and_broadcast(force_character_event=False)
 
-    def _capture_and_broadcast(self, *, force_character_event: bool) -> None:
+    def _capture_and_broadcast(
+        self,
+        *,
+        force_character_event: bool,
+    ) -> None:
         state = self.adapter.state_provider()
         signature = self._signature(state)
         character_id = self._character_id(state)
@@ -232,14 +216,15 @@ class MobileCompanionController(QObject):
             self._last_signature = signature
             self._last_character_id = character_id
             return
-
         if signature == self._last_signature and not force_character_event:
             return
 
-        character_changed = force_character_event or character_id != self._last_character_id
+        character_changed = (
+            force_character_event
+            or character_id != self._last_character_id
+        )
         self._last_signature = signature
         self._last_character_id = character_id
-
         if character_changed:
             self.server.notify_active_character_changed()
         else:
@@ -249,6 +234,75 @@ class MobileCompanionController(QObject):
         state = self.adapter.state_provider()
         self._last_signature = self._signature(state)
         self._last_character_id = self._character_id(state)
+
+    def _refresh_phone_status(self, *_signal_args) -> None:
+        """Synchronize the Saved-area badge with *authenticated live sockets*.
+
+        The server signals immediately on login/disconnect. The lightweight
+        timer also heals a missed signal or a header widget replaced by Qt.
+        Paired-but-offline phones are deliberately not counted.
+        """
+        if self._shutdown:
+            return
+        try:
+            live_ids = frozenset(self.server.connected_device_ids())
+        except RuntimeError:
+            live_ids = frozenset()
+        self._update_phone_status(live_ids)
+
+    def _update_phone_status(self, live_ids) -> None:
+        """Render a compact status without changing the header's geometry.
+
+        In particular, do not shortcut on count alone: replacing the header
+        QLabel or swapping one connected phone for another must repaint it.
+        """
+        if isinstance(live_ids, int):
+            # Compatibility with older tests/callers that supplied a count.
+            # The real device identities, not an untrusted count, determine
+            # what the user sees.
+            try:
+                live_ids = self.server.connected_device_ids()
+            except RuntimeError:
+                live_ids = set()
+        devices = frozenset(str(x) for x in live_ids if x)
+        count = len(devices)
+        self._last_phone_count = count
+        label = getattr(self.window, "phone_connection_label", None)
+        if label is None:
+            self._last_phone_label = None
+            self._last_phone_devices = devices
+            return
+
+        badge_text = (
+            "● Phone connected" if count == 1
+            else f"● {count} phones" if count else ""
+        )
+        tooltip = (
+            f"{count} currently connected Pocket DID phone(s) • live sync active"
+            if count else "No phone connected • paired phones may be offline"
+        )
+        try:
+            already_rendered = (
+                label is self._last_phone_label
+                and devices == self._last_phone_devices
+                and label.text() == badge_text
+                and label.toolTip() == tooltip
+                and not label.isHidden()
+            )
+            if already_rendered:
+                return
+            # The fixed-width label stays present (but blank while offline),
+            # so connecting/disconnecting cannot push neighboring controls.
+            label.setText(badge_text)
+            label.setToolTip(tooltip)
+            label.setVisible(True)
+        except (RuntimeError, ReferenceError):
+            # The main window can replace a header while it is being rebuilt.
+            # The next count event or fallback poll will bind the new label.
+            self._last_phone_label = None
+            return
+        self._last_phone_label = label
+        self._last_phone_devices = devices
 
     @staticmethod
     def _signature(state: Optional[dict]) -> str:
@@ -268,8 +322,6 @@ class MobileCompanionController(QObject):
         return str(value) if value is not None else None
 
     def _dialog_finished(self, *_args) -> None:
-        # Recreate next time so paired-device status is always fresh, while the
-        # server itself stays alive for the whole desktop session.
         self._dialog = None
 
 
@@ -280,18 +332,14 @@ def install_mobile_companion(
     *,
     hooks: Optional[FrontendHooks] = None,
 ) -> MobileCompanionController:
-    """Convenience entry point used by the finished frontend."""
     existing = getattr(window, "mobile_companion", None)
     if isinstance(existing, MobileCompanionController):
         return existing
-
     controller = MobileCompanionController(
         window=window,
         storage_system=storage_system,
         app_version=app_version,
         hooks=hooks,
     )
-    # Keep a strong lifetime reference on the window. Qt parent ownership is
-    # also present, but this makes the integration explicit and easy to inspect.
     window.mobile_companion = controller
     return controller

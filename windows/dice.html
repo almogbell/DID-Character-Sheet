@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent !important;
+      pointer-events: none;
+    }
+
+    #dice-stage {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 170px;
+      height: 205px;
+      background: transparent;
+      pointer-events: none;
+      transform: translate(-1000px, -1000px);
+      will-change: transform;
+      overflow: visible;
+    }
+
+    #dice-result {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      transform: translateX(-50%);
+      min-width: 88px;
+      width: max-content;
+      max-width: min(350px, calc(100vw - 20px));
+      padding: 6px 8px 7px 8px;
+      border-radius: 13px;
+      box-sizing: border-box;
+      text-align: center;
+      font-family: Georgia, serif;
+      font-weight: 700;
+      color: white;
+      display: none;
+      white-space: normal;
+      z-index: 5;
+    }
+
+    #dice-result .title {
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.05;
+      margin-bottom: 4px;
+    }
+
+    #dice-result .calc {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: center;
+      column-gap: 3px;
+      row-gap: 6px;
+      width: max-content;
+      max-width: 100%;
+      margin: 0 auto;
+      line-height: 1;
+    }
+
+    /* Keep the operator attached to its number when the equation wraps. */
+    #dice-result .roll-piece {
+      display: inline-flex;
+      align-items: flex-start;
+      flex: 0 0 auto;
+      gap: 2px;
+    }
+
+    #dice-result .term {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 25px;
+    }
+
+    #dice-result .die-swatch {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      flex: 0 0 8px;
+      border: 1px solid white;
+      border-radius: 2px;
+      vertical-align: middle;
+      margin-right: 3px;
+      box-sizing: border-box;
+    }
+
+    #dice-result .num {
+      font-size: 23px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    #dice-result .cap {
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1.1;
+      margin-top: 2px;
+    }
+
+    #dice-result .op {
+      font-size: 19px;
+      font-weight: 900;
+      line-height: 1;
+      padding-top: 2px;
+    }
+
+    #dice-box {
+      position: absolute;
+      left: 50%;
+      top: 82px;
+      transform: translateX(-50%);
+      width: 96px;
+      height: 112px;
+      background: transparent !important;
+      pointer-events: none;
+    }
+
+    #dice-box canvas,
+    #d100-tray canvas {
+      width: 100% !important;
+      height: 100% !important;
+      background: transparent !important;
+      pointer-events: none;
+      /* Slight glow/brightness keeps dark or purple dice readable on dark UI. */
+      filter:
+        drop-shadow(0 0 1px rgba(255, 255, 255, 0.55))
+        drop-shadow(0 2px 10px rgba(0, 0, 0, 0.65))
+        brightness(1.12)
+        saturate(1.15);
+    }
+
+    /* The physical d100 uses an independent canvas and a dedicated tray.
+       Mixed rolls put it beside DiceBox rather than on top of its dice. */
+    #d100-tray {
+      position: absolute;
+      top: 82px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 96px;
+      height: 112px;
+      pointer-events: none;
+      overflow: hidden;
+      background: transparent !important;
+    }
+
+    /* Deed success uses a HIGH-CONTRAST label, outline and checkmark rather
+       than red/green color alone. The same treatment works on every Ability
+       background, including Strength red and Agility green. */
+    #dice-result .term.deed-success {
+      background: #fff9e6;
+      color: #171717;
+      border: 2px solid #171717;
+      border-radius: 6px;
+      padding: 2px 4px;
+      box-sizing: border-box;
+      min-width: 42px;
+    }
+
+    #dice-result .term.deed-success .num,
+    #dice-result .term.deed-success .cap {
+      color: #171717;
+      text-shadow: none;
+    }
+
+    #dice-result .term.deed-success .num {
+      font-size: 20px;
+    }
+
+    #dice-result .deed-message {
+      display: inline-block;
+      align-self: center;
+      margin: 5px auto 0;
+      padding: 4px 7px;
+      border: 2px solid #171717;
+      border-radius: 6px;
+      background: #fff9e6;
+      color: #171717;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1.2;
+      text-shadow: none;
+      white-space: normal;
+    }
+  </style>
+
+  <!-- WebEngine blocks qrc:/// imports on a localhost-origin page.
+       The Python asset server safely exposes just Qt's WebChannel JS. -->
+  <script src="./qtwebchannel/qwebchannel.js"></script>
+</head>
+
+<body>
+  <div id="dice-stage">
+    <div id="dice-result" aria-hidden="true"></div>
+    <div id="dice-box"></div>
+    <div id="d100-tray" aria-hidden="true"></div>
+  </div>
+
+  <!-- These entry points must exist even if the 3D module fails to load.
+       Qt may invoke them before an async ES module becomes ready. -->
+  <script>
+    window.didDiceState = { roll: null, clear: null, hide: null, queued: null, error: null };
+    window.hideDiceResult = function() {
+      if (window.didDiceState.hide) return window.didDiceState.hide();
+      const result = document.getElementById('dice-result');
+      if (result) {
+        result.style.display = 'none';
+        result.innerHTML = '';
+        result.setAttribute('aria-hidden', 'true');
+      }
+    };
+    window.clearDiceDisplay = function() {
+      window.didDiceState.queued = null;
+      if (window.didDiceState.clear) return window.didDiceState.clear();
+      const stage = document.getElementById('dice-stage');
+      if (stage) stage.style.transform = 'translate(-1000px, -1000px)';
+      window.hideDiceResult();
+    };
+    window.rollDicePlan = function(...args) {
+      if (window.didDiceState.roll) return window.didDiceState.roll(...args);
+      if (window.didDiceState.error) {
+        console.error('[DID Dice] Cannot roll:', window.didDiceState.error);
+        return;
+      }
+      window.didDiceState.queued = args;
+      console.info('[DID Dice] Engine is loading; queued latest roll.');
+    };
+  </script>
+  <script type="module">
+    // Dynamic import preserves the error details, instead of silently
+    // preventing the entire dice page from registering its API.
+    let DiceBox = null;
+    try {
+      const loaded = await import('./dice_libs/dice-box/dice-box.es.min.js');
+      DiceBox = loaded.default;
+      if (typeof DiceBox !== 'function') {
+        throw new Error('DiceBox module has no default DiceBox constructor');
+      }
+    } catch (error) {
+      window.didDiceState.error = '3D engine import failed: ' + String(error);
+      console.error('[DID Dice]', window.didDiceState.error, error);
+    }
+
+    // Loaded on demand so the regular dice engine has no extra startup work.
+    let physicalD100Module = null;
+    let physicalD100Loading = null;
+    async function d100Engine() {
+      if (!physicalD100Loading) {
+        physicalD100Loading = import('./d100_physics.js').then(module => {
+          physicalD100Module = module;
+          return module;
+        }).catch(error => {
+          physicalD100Loading = null;
+          throw error;
+        });
+      }
+      return physicalD100Loading;
+    }
+    function clearD100() {
+      if (physicalD100Module) physicalD100Module.clearPhysicalD100();
+    }
+
+
+    let pyBridge = null;
+    let diceBox = null;
+    let readableThemeReady = false;
+    // Prevent a cancelled old roll from removing the visuals/results of a new one.
+    let activeRollSerial = 0;
+
+    const stage = document.getElementById("dice-stage");
+
+    function sendStatus(message) {
+      try {
+        if (pyBridge && pyBridge.receive_status) {
+          pyBridge.receive_status(String(message));
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    try {
+      if (typeof QWebChannel === 'function' &&
+          typeof qt !== 'undefined' && qt.webChannelTransport) {
+        new QWebChannel(qt.webChannelTransport, function(channel) {
+          pyBridge = channel.objects.pyBridge;
+          sendStatus("Dice bridge connected");
+          if (window.didDiceState.error) sendStatus('Dice error: ' + window.didDiceState.error);
+        });
+      } else {
+        console.error('[DID Dice] Qt WebChannel unavailable; rolls cannot reach the character sheet.');
+        window.didDiceState.error = 'Qt WebChannel unavailable';
+      }
+    } catch (error) {
+      console.error('[DID Dice] WebChannel setup failed:', error);
+      window.didDiceState.error = 'Qt WebChannel setup failed: ' + String(error);
+    }
+
+    async function initializeDice() {
+      try {
+        diceBox = new DiceBox({
+          container: "#dice-box",
+          assetPath: "assets/",
+          origin: new URL("./dice_libs/dice-box/", document.baseURI).href,
+          theme: "default",
+          themeColor: "#a87824",
+          scale: 10.5,
+          // Stagger launches so a batch does not spawn as one overlapping pile.
+          delay: 90,
+          offscreen: false,
+          enableShadows: true,
+          throwForce: 3.5,
+          spinForce: 6,
+          startingHeight: 8,
+          settleTimeout: 5000
+        });
+
+        await diceBox.init();
+
+        // DiceBox 1.1.4 only initializes its default theme. Its roll()
+        // method synchronously reads themesLoadedData[theme].diceAvailable,
+        // BEFORE each notation's asynchronous theme load. Explicitly await
+        // our custom high-contrast theme before accepting a roll.
+        // A missing optional theme must never stop the default dice engine.
+        try {
+          const readableTheme = await diceBox.loadTheme("did-readable");
+          const supportedDice = readableTheme && readableTheme.diceAvailable;
+          readableThemeReady = Array.isArray(supportedDice) &&
+            ["d4", "d6", "d8", "d10", "d12", "d20"].every(
+              die => supportedDice.includes(die)
+            );
+          if (!readableThemeReady) {
+            throw new Error("High-contrast theme does not support standard dice");
+          }
+        } catch (error) {
+          readableThemeReady = false;
+          console.warn("[DID Dice] High-contrast theme unavailable; using default:", error);
+          sendStatus("Readable dice theme unavailable; using default dice");
+        }
+
+        sendStatus("Dice ready");
+        return true;
+
+      } catch (error) {
+        diceBox = null;
+        window.didDiceState.error = 'Dice init error: ' + (error && error.message ? error.message : String(error));
+
+        sendStatus(
+          "Dice init error: " +
+          (error && error.message ? error.message : String(error))
+        );
+
+        console.error(error);
+        return false;
+      }
+    }
+
+    const diceInitialization = initializeDice();
+
+    window.didDiceState.clear = async function() {
+      activeRollSerial++;
+      clearD100();
+      try {
+        if (diceBox && typeof diceBox.clear === "function") {
+          await diceBox.clear();
+        }
+      } catch (error) {
+        console.warn(error);
+      }
+
+      stage.style.transition = "none";
+      stage.style.transform = "translate(-1000px, -1000px)";
+    };
+
+    function extractDieValue(results) {
+      function find(node) {
+        if (node == null) {
+          return null;
+        }
+
+        if (Array.isArray(node)) {
+          for (const item of node) {
+            const found = find(item);
+            if (found !== null) {
+              return found;
+            }
+          }
+          return null;
+        }
+
+        if (typeof node === "object") {
+          if (Array.isArray(node.rolls)) {
+            for (const roll of node.rolls) {
+              if (
+                roll &&
+                typeof roll === "object" &&
+                Number.isFinite(Number(roll.value))
+              ) {
+                return Number(roll.value);
+              }
+
+              const found = find(roll);
+              if (found !== null) {
+                return found;
+              }
+            }
+          }
+
+          for (const key of ["value", "result", "roll"]) {
+            if (
+              Object.prototype.hasOwnProperty.call(node, key) &&
+              Number.isFinite(Number(node[key]))
+            ) {
+              return Number(node[key]);
+            }
+          }
+
+          for (const key of Object.keys(node)) {
+            const found = find(node[key]);
+            if (found !== null) {
+              return found;
+            }
+          }
+        }
+
+        return null;
+      }
+
+      return find(results);
+    }
+
+    function detectRenderedDieBounds() {
+      try {
+        const canvas = document.querySelector("#dice-box canvas");
+
+        if (!canvas) {
+          return null;
+        }
+
+        const gl =
+          canvas.getContext("webgl2") ||
+          canvas.getContext("webgl") ||
+          canvas.getContext("experimental-webgl");
+
+        if (!gl) {
+          return null;
+        }
+
+        const bufferWidth = gl.drawingBufferWidth;
+        const bufferHeight = gl.drawingBufferHeight;
+
+        if (bufferWidth <= 0 || bufferHeight <= 0) {
+          return null;
+        }
+
+        const pixels = new Uint8Array(
+          bufferWidth * bufferHeight * 4
+        );
+
+        gl.readPixels(
+          0,
+          0,
+          bufferWidth,
+          bufferHeight,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          pixels
+        );
+
+        let minX = bufferWidth;
+        let minY = bufferHeight;
+        let maxX = -1;
+        let maxY = -1;
+
+        /*
+         * Ignore faint shadow pixels and keep the solid die itself.
+         * The page/canvas background is transparent.
+         */
+        const alphaThreshold = 150;
+
+        for (let y = 0; y < bufferHeight; y += 1) {
+          for (let x = 0; x < bufferWidth; x += 1) {
+            const alpha = pixels[
+              ((y * bufferWidth) + x) * 4 + 3
+            ];
+
+            if (alpha < alphaThreshold) {
+              continue;
+            }
+
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+
+        if (maxX < minX || maxY < minY) {
+          return null;
+        }
+
+        const canvasRect = canvas.getBoundingClientRect();
+
+        const scaleX = canvasRect.width / bufferWidth;
+        const scaleY = canvasRect.height / bufferHeight;
+
+        /*
+         * WebGL's Y axis is bottom-up; DOM coordinates are top-down.
+         */
+        const cssLeft =
+          canvasRect.left
+          + minX * scaleX;
+
+        const cssRight =
+          canvasRect.left
+          + (maxX + 1) * scaleX;
+
+        const cssTop =
+          canvasRect.top
+          + (bufferHeight - 1 - maxY) * scaleY;
+
+        const cssBottom =
+          canvasRect.top
+          + (bufferHeight - minY) * scaleY;
+
+        return {
+          x: Math.round(cssLeft),
+          y: Math.round(cssTop),
+          width: Math.max(
+            1,
+            Math.round(cssRight - cssLeft)
+          ),
+          height: Math.max(
+            1,
+            Math.round(cssBottom - cssTop)
+          )
+        };
+
+      } catch (error) {
+        console.warn(
+          "Could not detect die bounds",
+          error
+        );
+
+        return null;
+      }
+    }
+
+
+    /*
+     * DiceBox 1.1 supports an array of roll objects: one roll() launches
+     * every chosen die at once. Its result contains one group per request.
+     * Never use the group total to infer the individual Martial die result.
+     */
+    /*
+     * DiceBox 1.1 can return a group array with one or several rolls per
+     * group, or individual die records. A request is NOT guaranteed to
+     * correspond to exactly one `group.rolls[0]`. Match the physical dice
+     * to the requested sizes, keeping each result exactly once.
+     *
+     * Do not read group.value: it is a subtotal, not an individual die.
+     */
+    function readBatchResults(results, requested) {
+      const groups = Array.isArray(results)
+        ? results
+        : (results && Array.isArray(results.results)
+            ? results.results
+            : (results ? [results] : []));
+      const dice = [];
+      for (let index = 0; index < groups.length; index += 1) {
+        const group = groups[index];
+        if (!group || typeof group !== "object") continue;
+        const rolls = Array.isArray(group.rolls)
+          ? group.rolls
+          : (Array.isArray(group.dice) ? group.dice : [group]);
+        for (const roll of rolls) {
+          if (!roll || typeof roll !== "object") continue;
+          // `result` is used in some 1.1 builds, `value` in others.
+          const rawFace = roll.value ?? roll.result;
+          const rawSides = roll.sides ?? group.sides;
+          const face = Number(rawFace);
+          const sides = Number(rawSides);
+          if (rawFace == null || rawSides == null ||
+              !Number.isInteger(face) || !Number.isInteger(sides) ||
+              face < 1 || face > sides) continue;
+          const id = roll.groupId ?? group.id ?? group.groupId ?? index;
+          dice.push({face, sides, groupId: Number(id), used: false});
+        }
+      }
+      if (dice.length < requested.length) {
+        throw new Error(
+          "DiceBox returned " + dice.length + " readable dice for " +
+          requested.length + " requested; group shapes=" +
+          groups.map(g => g && typeof g === "object"
+            ? Object.keys(g).join(",") : typeof g).join(" | ")
+        );
+      }
+      return requested.map((request, index) => {
+        // When DiceBox preserves group IDs, prefer those. If it merges dice
+        // into one group, match by sides and original order instead.
+        let die = dice.find(d => !d.used && d.sides === request.sides &&
+          d.groupId === index);
+        if (!die) die = dice.find(d => !d.used && d.sides === request.sides);
+        if (!die) {
+          throw new Error(
+            "No physical d" + request.sides + " result for request " + index
+          );
+        }
+        die.used = true;
+        return die.face;
+      });
+    }
+
+    /*
+     * DiceBox 1.1.4 supports `themeColor` on EACH notation object (not just
+     * the global box configuration). Choose related shades of the original
+     * ability color to make d4+magic d4 distinguishable in the physics roll.
+     * Hues stay close to the base color rather than turning an ability's
+     * purple/red/green dice into an unrelated palette.
+     */
+    function dieVariantColor(baseHex, kind, index = 0) {
+      const match = /^#([0-9a-f]{6})$/i.exec(String(baseHex || ""));
+      const base = match ? match[1] : "a87824";
+      if (kind === "ability") return "#" + base;
+
+      const r = parseInt(base.slice(0, 2), 16) / 255;
+      const g = parseInt(base.slice(2, 4), 16) / 255;
+      const b = parseInt(base.slice(4, 6), 16) / 255;
+      const high = Math.max(r, g, b);
+      const low = Math.min(r, g, b);
+      const delta = high - low;
+      let hue = 0;
+      const light = (high + low) / 2;
+      let sat = delta === 0 ? 0 : delta / (1 - Math.abs(2 * light - 1));
+      if (delta) {
+        if (high === r) hue = ((g - b) / delta) % 6;
+        else if (high === g) hue = (b - r) / delta + 2;
+        else hue = (r - g) / delta + 4;
+        hue = ((hue * 60) + 360) % 360;
+      }
+      const palette = {
+        advantage: [7, 0.18, 0.02],
+        disadvantage: [-8, -0.10, 0.08],
+        magic: [20, 0.10, 0.06],
+        martial: [-19, -0.02, 0.09],
+        mighty: [30, 0.12, -0.03],
+        bonus_die: [-28, 0.08, -0.02],
+        extra: [13, -0.07, 0.04]
+      };
+      const [hueDelta, lightDelta, satDelta] = palette[kind] || palette.extra;
+      hue = (hue + hueDelta + 360) % 360;
+      sat = Math.min(0.88, Math.max(0.48, sat + satDelta));
+      const l = Math.min(0.80, Math.max(0.35,
+        light + lightDelta + (index % 3) * 0.025
+      ));
+      // Standard HSL-to-RGB conversion. Return HEX because DiceBox requires
+      // a hex theme color for its per-die material selection.
+      const a = sat * Math.min(l, 1 - l);
+      const channel = n => {
+        const k = (n + hue / 30) % 12;
+        return Math.round(255 * (l - a * Math.max(-1,
+          Math.min(k - 3, 9 - k, 1)
+        )));
+      };
+      return "#" + [channel(0), channel(8), channel(4)]
+        .map(v => v.toString(16).padStart(2, "0")).join("");
+    }
+
+    /* Cancel opposing dice even when a caller bypasses the Python dialog.
+     * Never roll an advantage die which has already been cancelled. */
+    function cancelOpposingDice(extras) {
+      const kept = [];
+      for (const item of extras) {
+        const kind = String(item.kind || "");
+        if (kind !== "advantage" && kind !== "disadvantage") {
+          kept.push(item);
+          continue;
+        }
+        const opposite = kind === "advantage" ? "disadvantage" : "advantage";
+        const position = kept.findIndex(another => another.kind === opposite);
+        if (position < 0) kept.push(item);
+        else kept.splice(position, 1);
+      }
+      return kept;
+    }
+
+    /*
+     * One batch for the entire initial roll, including advantage,
+     * disadvantage, and every selected improvement die. Only the ordinary
+     * ability die explodes; its additional rolls use add(), never roll(),
+     * so previously settled dice stay on-screen and in the calculation.
+     */
+    async function rollPlanBatches(plan, baseColor = "#a87824") {
+      const ability = plan.ability || {};
+      const extras = cancelOpposingDice(
+        Array.isArray(plan.extras) ? plan.extras : []
+      );
+      const specs = [ability, ...extras].map((item, index) => {
+        const sides = Number(item.sides);
+        if (!Number.isInteger(sides) || sides < 2 || sides > 100) {
+          throw new Error("Invalid die size in position " + index);
+        }
+        return {
+          label: String(item.label || (index === 0 ? "roll" : "die")),
+          kind: String(item.kind || (index === 0 ? "ability" : "extra")),
+          sides,
+          sign: index === 0 ? 1 : (Number(item.sign) < 0 ? -1 : 1),
+          // Only the first (ordinary ability) die can explode. All extra
+          // dice are single rolls, regardless of caller-provided flags.
+          explode: index === 0 && Boolean(item.explode),
+          // Roll Other Dice is a neutral pool: all ordinary dice must
+          // share the same gold color. Only character ability rolls vary
+          // extra-die colors to distinguish advantage, magic, etc.
+          color: plan.roll_type === "other_dice"
+            ? baseColor
+            : dieVariantColor(
+                baseColor,
+                index === 0 ? "ability" : String(item.kind || "extra"),
+                index
+              ),
+          values: []
+        };
+      });
+
+      // A physical d100 is NOT DiceBox's percentile pair. Route every d100
+      // to our single-piece convex-body simulator, including mixed rolls.
+      // Preserve the original per-request order for the history/result card.
+      const physical = specs.filter(spec => spec.sides === 100);
+      if (physical.length > 2) throw new Error("Maximum 2 d100 dice per roll");
+      const standard = specs.filter(spec => spec.sides !== 100);
+      // Use the same high-contrast numeral atlas for ability rolls and
+      // Roll Other Dice alike. The notation's individual themeColor preserves
+      // the ability/advantage/disadvantage/improvement color distinctions.
+      // Fall back to the built-in theme if the optional atlas could not load.
+      const standardTheme = readableThemeReady ? "did-readable" : "default";
+      const standardRequests = standard.map(spec => ({
+        qty: 1, sides: spec.sides, theme: standardTheme,
+        themeColor: spec.color
+      }));
+      // Start both engines together. No simulated/independently-picked d100
+      // is substituted if the physics fails or times out.
+      const physicsPromise = physical.length
+        ? d100Engine().then(engine => engine.rollPhysicalD100(
+            physical.length,
+            document.getElementById('d100-tray'),
+            standard.length > 0,
+            // Match the separate physical d100 to the other dice when
+            // selected from Roll Other Dice; keep its original purple
+            // appearance in all other modes.
+            plan.roll_type === "other_dice" ? baseColor : undefined
+          ))
+        : Promise.resolve([]);
+      const standardPromise = standardRequests.length
+        ? diceBox.roll(standardRequests, {
+            newStartPoint: true, theme: standardTheme, themeColor: baseColor
+          }).then(results => readBatchResults(results, standardRequests))
+        : Promise.resolve([]);
+      // Always consume both promises; failures propagate through Promise.all.
+      const [physicsFaces, standardFaces] = await Promise.all([
+        physicsPromise, standardPromise
+      ]);
+      physical.forEach((spec, i) => spec.values.push(physicsFaces[i]));
+      standard.forEach((spec, i) => spec.values.push(standardFaces[i]));
+
+      let exploding = specs.filter(spec =>
+        spec.explode && spec.values[spec.values.length - 1] === spec.sides
+      );
+      while (exploding.length) {
+        sendStatus("Explosion! Rolling " + exploding.length + " dice together...");
+        const requests = exploding.map(spec => ({
+          qty: 1,
+          sides: spec.sides,
+          theme: standardTheme,
+          themeColor: spec.color
+        }));
+        const wave = await diceBox.add(requests, {
+          newStartPoint: true,
+          theme: standardTheme,
+          themeColor: baseColor
+        });
+        const faces = readBatchResults(wave, requests);
+        const nextWave = [];
+        exploding.forEach((spec, index) => {
+          spec.values.push(faces[index]);
+          if (faces[index] === spec.sides) nextWave.push(spec);
+        });
+        exploding = nextWave;
+      }
+      return specs;
+    }
+
+
+    window.didDiceState.hide = function() {
+      const result = document.getElementById("dice-result");
+
+      if (!result) {
+        return;
+      }
+
+      result.style.display = "none";
+      result.innerHTML = "";
+      result.setAttribute(
+        "aria-hidden",
+        "true"
+      );
+    };
+
+
+    window.showDiceResult = function(
+      summary,
+      title,
+      color
+    ) {
+      const result = document.getElementById("dice-result");
+
+      if (!result) {
+        return;
+      }
+
+      const terms = Array.isArray(summary.terms)
+        ? summary.terms
+        : [];
+
+      const flatBonus = Number(
+        summary.flat_bonus || 0
+      );
+
+      const total = Number(
+        summary.total || 0
+      );
+
+      const simpleRoll = (
+        terms.length === 1
+        && Array.isArray(terms[0].values)
+        && terms[0].values.length === 1
+        && flatBonus === 0
+      );
+
+      result.style.background = String(
+        color || "#a87824"
+      );
+
+      result.innerHTML = "";
+
+      const titleNode = document.createElement("div");
+      titleNode.className = "title";
+      titleNode.textContent = String(
+        title || "Roll"
+      );
+      result.appendChild(titleNode);
+
+      const calc = document.createElement("div");
+      calc.className = "calc";
+
+      let pendingOperator = null;
+
+      function addTerm(value, caption, deedSuccess = false, dieColor = null) {
+        const piece = document.createElement("div");
+        piece.className = "roll-piece";
+        if (pendingOperator !== null) {
+          const op = document.createElement("div");
+          op.className = "op";
+          op.textContent = pendingOperator;
+          piece.appendChild(op);
+          pendingOperator = null;
+        }
+
+        const host = document.createElement("div");
+        host.className = deedSuccess ? "term deed-success" : "term";
+
+        const number = document.createElement("div");
+        number.className = "num";
+        // A checkmark AND a border identify the successful Martial die.
+        // Neither meaning nor legibility depends on distinguishing colors.
+        number.textContent = deedSuccess ? "✓ " + String(value) : String(value);
+        if (deedSuccess) {
+          host.setAttribute("aria-label", "Martial deed successful: " + String(value));
+        }
+
+        const cap = document.createElement("div");
+        cap.className = "cap";
+        cap.textContent = String(caption);
+
+        host.appendChild(number);
+        if (dieColor && !deedSuccess) {
+          const swatch = document.createElement("span");
+          swatch.className = "die-swatch";
+          swatch.style.backgroundColor = dieColor;
+          swatch.setAttribute("aria-hidden", "true");
+          cap.prepend(swatch);
+        }
+        host.appendChild(cap);
+        piece.appendChild(host);
+        calc.appendChild(piece);
+      }
+
+      function addOperator(text) {
+        pendingOperator = String(text);
+      }
+
+      if (summary.roll_type === "other_dice") {
+        calc.style.display = "block";
+        calc.style.maxHeight = "220px";
+        calc.style.overflowY = "auto";
+        calc.style.textAlign = "left";
+
+        const valuesBySides = new Map();
+        for (const term of terms) {
+          const sides = Number(term.sides);
+          if (!valuesBySides.has(sides)) {
+            valuesBySides.set(sides, []);
+          }
+          for (const value of (term.values || [])) {
+            valuesBySides.get(sides).push(value);
+          }
+        }
+
+        for (const sides of [4, 6, 8, 10, 12, 20, 100]) {
+          const values = valuesBySides.get(sides);
+          if (!values || values.length === 0) {
+            continue;
+          }
+          const row = document.createElement("div");
+          row.textContent = `d${sides}: ${values.join(", ")}`;
+          row.style.padding = "2px 8px";
+          calc.appendChild(row);
+        }
+      } else if (simpleRoll) {
+        addTerm(total, "total", false, terms[0].color);
+      } else {
+        let first = true;
+
+        for (const term of terms) {
+          const sign = Number(term.sign || 1);
+          const values = Array.isArray(term.values)
+            ? term.values
+            : [];
+
+          for (let i = 0; i < values.length; i += 1) {
+            if (!first) {
+              addOperator(
+                sign < 0
+                  ? "−"
+                  : "+"
+              );
+            }
+
+            addTerm(
+              values[i],
+              i === 0
+                ? String(term.label || "die")
+                : "explode",
+              term.kind === "martial" && Number(values[i]) > 2,
+              term.color
+            );
+
+            first = false;
+          }
+        }
+
+        if (flatBonus !== 0) {
+          addOperator(
+            flatBonus < 0
+              ? "−"
+              : "+"
+          );
+
+          addTerm(
+            Math.abs(flatBonus),
+            "bonus"
+          );
+        }
+
+        addOperator("=");
+        addTerm(total, "total");
+      }
+
+      result.appendChild(calc);
+
+      if (summary.deed_success === true) {
+        const deed = document.createElement("div");
+        deed.className = "deed-message";
+        deed.setAttribute("role", "status");
+        deed.textContent = "✓ DEED SUCCESSFUL";
+        result.appendChild(deed);
+      }
+
+      /*
+       * Show invisibly for one frame so its real width/height exist,
+       * then position it from the ACTUAL settled die pixels.
+       */
+      result.style.visibility = "hidden";
+      result.style.display = "block";
+
+      const containsPhysicalD100 = terms.some(term => Number(term.sides) === 100);
+      const physicalBounds = containsPhysicalD100 && physicalD100Module &&
+        physicalD100Module.getPhysicalD100Bounds
+        ? physicalD100Module.getPhysicalD100Bounds() : null;
+      const hasOrdinaryDice = terms.some(term => Number(term.sides) !== 100);
+      const ordinaryBounds = (!containsPhysicalD100 || hasOrdinaryDice)
+        ? detectRenderedDieBounds() : null;
+      // A mixed roll is two separate canvases. Use their union so the result
+      // card is centered over the full set, not just the d100 on the right.
+      const dieBounds = physicalBounds && ordinaryBounds ? {
+        x: Math.min(physicalBounds.x, ordinaryBounds.x),
+        y: Math.min(physicalBounds.y, ordinaryBounds.y),
+        width: Math.max(physicalBounds.x + physicalBounds.width,
+                        ordinaryBounds.x + ordinaryBounds.width) -
+               Math.min(physicalBounds.x, ordinaryBounds.x),
+        height: Math.max(physicalBounds.y + physicalBounds.height,
+                         ordinaryBounds.y + ordinaryBounds.height) -
+                Math.min(physicalBounds.y, ordinaryBounds.y)
+      } : (physicalBounds || ordinaryBounds);
+      const stageRect = stage.getBoundingClientRect();
+
+      if (dieBounds) {
+        const dieCenterX =
+          dieBounds.x
+          + dieBounds.width / 2
+          - stageRect.left;
+
+        const dieTopY =
+          dieBounds.y
+          - stageRect.top;
+
+        // Center on the die unless the card would cross the visible window edge.
+        const halfWidth = result.offsetWidth / 2;
+        const minCenter = halfWidth + 5 - stageRect.left;
+        const maxCenter = window.innerWidth - halfWidth - 5 - stageRect.left;
+        result.style.left =
+          Math.max(minCenter, Math.min(dieCenterX, maxCenter)) + "px";
+
+        if (containsPhysicalD100) {
+          // Unlike DiceBox, the d100 uses a separate 3D canvas. Anchor above
+          // its projected mesh, and use the space below if the top is clipped.
+          const gap = 10;
+          const above = dieTopY - result.offsetHeight - gap;
+          const below = dieTopY + dieBounds.height + gap;
+          const bottomLimit = window.innerHeight - stageRect.top - result.offsetHeight - 6;
+          result.style.top = (
+            above + stageRect.top >= 6 ? above
+            : below <= bottomLimit ? below
+            : Math.max(6 - stageRect.top, Math.min(above, bottomLimit))
+          ) + "px";
+        } else {
+          // Preserve ordinary dice positioning exactly as before.
+          result.style.top =
+            Math.max(0, dieTopY - result.offsetHeight - 6) + "px";
+        }
+      } else if (containsPhysicalD100) {
+        // Never default to stage top-left for a d100: it is rendered by a
+        // different WebGL canvas, so DiceBox pixel detection cannot find it.
+        result.style.left = "50%";
+        result.style.top = (stage.clientHeight - result.offsetHeight - 6) + "px";
+      } else {
+        // Existing DiceBox fallback, unchanged.
+        result.style.left = "50%";
+        result.style.top = "0px";
+      }
+
+      result.style.visibility = "visible";
+      result.setAttribute(
+        "aria-hidden",
+        "false"
+      );
+    };
+
+
+    window.didDiceState.roll = async function(
+      plan,
+      color,
+      startX,
+      startY,
+      endX,
+      endY,
+      stageWidth,
+      stageHeight
+    ) {
+      const thisRoll = ++activeRollSerial;
+      try {
+        const ready = await diceInitialization;
+        if (thisRoll !== activeRollSerial) return;
+
+        if (!ready || !diceBox) {
+          throw new Error(
+            "3D dice engine failed to initialize"
+          );
+        }
+
+        hideDiceResult();
+        clearD100();
+
+        if (
+          typeof diceBox.clear === "function"
+        ) {
+          await diceBox.clear();
+        }
+
+        const stage = document.getElementById(
+          "dice-stage"
+        );
+
+        // DiceBox uses ONE physical arena for every ordinary die. The old
+        // 96x112px arena plus scale=10.5 made simultaneous d6 stacks frequent.
+        // Expand the arena for all multi-die rolls (including ability extras).
+        // Keep the single-ability-die appearance exactly as before.
+        const requestedDice = [plan.ability, ...(plan.extras || [])]
+          .filter(Boolean);
+        const ordinaryDiceCount = requestedDice
+          .filter(item => Number(item.sides) !== 100).length;
+        const physicalD100Count = requestedDice
+          .filter(item => Number(item.sides) === 100).length;
+        const mixedPhysicalRoll = physicalD100Count > 0 && ordinaryDiceCount > 0;
+        const multiDice = ordinaryDiceCount > 1;
+        const stagePixelWidth = Math.max(120, Number(stageWidth) || 170);
+        const trayHeight = Math.max(112, (Number(stageHeight) || 250) - 68);
+        const ordinaryTray = document.getElementById("dice-box");
+        const d100Tray = document.getElementById("d100-tray");
+        // Keep the two independently simulated dice engines in NON-overlapping
+        // screen regions. Their physical bodies cannot collide across engines,
+        // so drawing them on top of each other misleadingly looks like stacking.
+        if (ordinaryTray && d100Tray) {
+          ordinaryTray.style.visibility = ordinaryDiceCount ? "visible" : "hidden";
+          d100Tray.style.display = physicalD100Count ? "block" : "none";
+          ordinaryTray.style.top = "82px";
+          d100Tray.style.top = "82px";
+          ordinaryTray.style.height = trayHeight + "px";
+          d100Tray.style.height = trayHeight + "px";
+          if (mixedPhysicalRoll) {
+            const margin = 9;
+            const gap = 14;
+            const usableWidth = Math.max(112, stagePixelWidth - margin * 2 - gap);
+            // Equal horizontal room prevents a narrow d100 camera from
+            // miniaturizing it while DiceBox gets an oversized viewport.
+            const ordinaryWidth = Math.round(usableWidth * 0.5);
+            const physicalWidth = usableWidth - ordinaryWidth;
+            ordinaryTray.style.left = margin + "px";
+            ordinaryTray.style.transform = "none";
+            ordinaryTray.style.width = ordinaryWidth + "px";
+            d100Tray.style.left = (margin + ordinaryWidth + gap) + "px";
+            d100Tray.style.transform = "none";
+            d100Tray.style.width = physicalWidth + "px";
+          } else {
+            ordinaryTray.style.left = "50%";
+            ordinaryTray.style.transform = "translateX(-50%)";
+            ordinaryTray.style.width = ((multiDice || plan.roll_type === "other_dice")
+              ? Math.max(96, stagePixelWidth - 18) : 96) + "px";
+            d100Tray.style.left = "50%";
+            d100Tray.style.transform = "translateX(-50%)";
+            d100Tray.style.width = Math.max(112, stagePixelWidth - 18) + "px";
+          }
+        }
+        // Scale is a real DiceBox physics setting, not a CSS transform.
+        // Smaller rigid bodies have room to collide and roll apart. We never
+        // relocate a settled die or alter any result after the physics roll.
+        // The DiceBox camera projects 3D scale in screen HEIGHT, not width.
+        // A d8 in a 282px-tall mixed canvas otherwise looks ~2.5x larger
+        // than the SAME die in its normal 112px-tall canvas. Compensate
+        // only in mixed d100 rolls; do not change ordinary ability rolls.
+        const normalScale = multiDice
+          ? Math.max(4.4, Math.min(7.0, 10.5 / Math.sqrt(ordinaryDiceCount)))
+          : 10.5;
+        const mixedScale = mixedPhysicalRoll
+          ? Math.max(3.5, normalScale * 112 / trayHeight)
+          : normalScale;
+        await diceBox.updateConfig({
+          scale: mixedScale,
+          delay: multiDice ? 110 : 90
+        });
+
+        if (stage) {
+          stage.style.width =
+            Math.max(
+              120,
+              Number(stageWidth) || 170
+            ) + "px";
+
+          stage.style.height =
+            Math.max(
+              140,
+              Number(stageHeight) || 250
+            ) + "px";
+
+          stage.style.transition = "none";
+          stage.style.transform =
+            "translate("
+            + Number(startX)
+            + "px, "
+            + Number(startY)
+            + "px)";
+
+          void stage.offsetWidth;
+        }
+
+        // This DiceBox release resizes its renderer and physics world from
+        // a debounced window event; CSS resizing alone stretches the canvas.
+        window.dispatchEvent(new Event("resize"));
+        await new Promise(resolve => setTimeout(resolve, 150));
+        if (thisRoll !== activeRollSerial) return;
+
+        const chosenColor = String(
+          color || "#a87824"
+        );
+
+        // Each requested die gets its own themeColor below. No global
+        // updateConfig is necessary, avoiding a theme reload during a roll.
+
+        if (stage) {
+          await new Promise((resolve) => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(resolve);
+            });
+          });
+
+          stage.style.transition =
+            "transform 1250ms cubic-bezier(0.20, 0.75, 0.25, 1.00)";
+
+          stage.style.transform =
+            "translate("
+            + Number(endX)
+            + "px, "
+            + Number(endY)
+            + "px)";
+        }
+
+        sendStatus("Rolling selected dice together...");
+        const terms = await rollPlanBatches(plan, chosenColor);
+        if (thisRoll !== activeRollSerial) return;
+        const flatBonus = Number(plan.flat_bonus || 0);
+        let total = flatBonus;
+        for (const term of (plan.roll_type === "other_dice" ? [] : terms)) {
+          total += term.sign * term.values.reduce((sum, face) => sum + face, 0);
+        }
+
+        const deedSuccess = terms.some(
+          term => term.kind === "martial" && term.values.some(face => face >= 3)
+        );
+        const summary = {
+          roll_type: plan.roll_type === "other_dice" ? "other_dice" : "ability",
+          ability_name: String(plan.ability_name || "Ability"),
+          terms,
+          flat_bonus: flatBonus,
+          total: plan.roll_type === "other_dice" ? null : total,
+          deed_success: deedSuccess
+        };
+
+        await new Promise((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+          });
+        });
+
+        /*
+         * Give Qt WebEngine a fraction of a second to finish painting the
+         * settled die before Python tells the result card to appear.
+         *
+         * 240 ms is short enough that a person should perceive the result as
+         * immediate, while giving the renderer time to catch up.
+         */
+        await new Promise((resolve) => {
+          setTimeout(
+            resolve,
+            140
+          );
+        });
+
+        if (thisRoll !== activeRollSerial) return;
+        if (
+          pyBridge
+          && pyBridge.receive_roll_summary
+        ) {
+          pyBridge.receive_roll_summary(
+            JSON.stringify(summary)
+          );
+        }
+
+        if (
+          pyBridge
+          && plan.roll_type !== "other_dice"
+          && pyBridge.receive_roll
+        ) {
+          pyBridge.receive_roll(
+            Number(total)
+          );
+        }
+
+      } catch (error) {
+        if (thisRoll !== activeRollSerial) return;
+        clearD100();
+        sendStatus(
+          "Dice roll error: "
+          + (
+            error && error.message
+              ? error.message
+              : String(error)
+          )
+        );
+
+        console.error(error);
+        // A failed physics roll must not look like a finished roll with no
+        // number. Show a visible failure; never invent a random result.
+        const errorCard = document.getElementById("dice-result");
+        if (errorCard) {
+          errorCard.textContent = "Dice roll failed — please try again";
+          errorCard.style.left = "50%";
+          errorCard.style.top = "8px";
+          errorCard.style.visibility = "visible";
+          errorCard.style.display = "block";
+          errorCard.setAttribute("aria-hidden", "false");
+        }
+      }
+    };
+
+    // The top-level, non-module entry points remain stable for all Qt calls.
+    // Queue at most one early click, and never pretend to roll if init failed.
+    if (window.didDiceState.queued && !window.didDiceState.error) {
+      const queuedRoll = window.didDiceState.queued;
+      window.didDiceState.queued = null;
+      window.rollDicePlan(...queuedRoll);
+    }
+  </script>
+</body>
+</html>
