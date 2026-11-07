@@ -118,6 +118,7 @@ def build_shared_character_state_from_dict(data, generated_utc=None):
             "hearts": {
                 "current": max(0, _as_int(hp.get("current_HP"), 0)),
                 "max": max(0, _as_int(hp.get("max_hearts"), 0)),
+                "max_hp": max(0, _as_int(hp.get("max_HP"), _as_int(hp.get("max_hearts"), 0) * 4)),
             },
             "adversity_tokens": {
                 "current": max(0, _as_int(adversity.get("current_AT"), 0)),
