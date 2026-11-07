@@ -52,14 +52,14 @@ class PlayerPolishSevenTests(unittest.TestCase):
         self.assertIn('self.refresh_btn.setEnabled(False)', SRC)
         self.assertIn('self.refresh_btn.setEnabled(True)', SRC)
 
-    def test_double_click_requires_current_linked_character(self):
+    def test_click_opens_the_correct_saved_campaign_character(self):
         self.assertIn('class _CampaignCharacterOpenLabel(QLabel):', SRC)
-        self.assertIn('def mouseDoubleClickEvent(self, event):', SRC)
+        self.assertIn('def mouseReleaseEvent(self, event):', SRC)
         self.assertIn('def _open_linked_player_character(self):', SRC)
-        self.assertIn('current_id != str(getattr(self, "_player_linked_character_id", "") or "")', SRC)
-        self.assertIn('self.accept()', SRC)
+        self.assertIn('target_id, record = self._campaign_character_record()', SRC)
+        self.assertIn('self.window.load_character_from_path(filepath)', SRC)
         self.assertIn('self.window.activateWindow()', SRC)
-        self.assertNotIn('CharacterStorageSystem.import_character_file(', SRC)
+        self.assertIn('def _find_saved_character_file(self, character_id):', SRC)
 
     def test_subsequent_campaign_selection_clears_inline_details(self):
         start = SRC.index('    def _player_selection_changed(self, row):')
