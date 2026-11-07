@@ -93,9 +93,23 @@ def character_rule_mismatches(character, template: CharacterTemplate) -> list[st
         ),
     )
 
-    for label, actual, expected in comparisons:
-        if actual != expected:
-            mismatches.append(f"{label} does not match the campaign rules.")
+    # These fields describe the template used when the character was created,
+    # not its actual species or current ability dice. Do not claim either is
+    # illegal merely because a different template was used.
+    if any(actual != expected for _, actual, expected in comparisons):
+        mismatches.append(
+            "Saved creation-rule settings differ from this campaign's template; "
+            "DM approval is required even if the species and dice are allowed."
+        )
+
+    # Only report a factual species violation for an existing character that
+    # did not inherit this campaign's creation rules.
+    if not bool(getattr(character, "creation_rules_active", False)):
+        species = str(getattr(character, "species_name", "") or "").strip()
+        if rules.species_mode == "required" and not species:
+            mismatches.append("This campaign requires a Species, but this character has none.")
+        elif rules.species_mode == "disabled" and species:
+            mismatches.append("This campaign does not allow a Species, but this character has one.")
 
     expected_free = int(getattr(rules, "free_heightened_ability_slots", 2))
     actual_free = int(getattr(character, "free_heightened_ability_slots", 2))
