@@ -1683,11 +1683,13 @@ class PlayerCampaignsDialog(_WizardDialog):
         name.setStyleSheet("font-weight:900;")
         heading.addWidget(name)
         heading.addStretch()
-        heading.addWidget(QLabel("DM"))
-        spacer = QWidget()
-        spacer.setFixedWidth(18)
-        heading.addWidget(spacer)
-        heading.addWidget(QLabel("Party"))
+        # Use the same 34px columns and spacing as the checkbox rows.
+        # A separate spacer used to shift the DM heading out of alignment.
+        for title in ("DM", "Party"):
+            label = QLabel(title)
+            label.setFixedWidth(34)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            heading.addWidget(label)
         outer.addLayout(heading)
         body = QVBoxLayout()
         body.setSpacing(2)
@@ -2243,6 +2245,13 @@ class _CampaignCharacterOpenLabel(QLabel):
     """Double-click a verified linked name to return to its open sheet."""
     _on_open = None
 
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and callable(self._on_open):
+            self._on_open()
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and callable(self._on_open):
             self._on_open()
@@ -2290,7 +2299,9 @@ class CampaignsHubDialog(QDialog):
         self._hub_delete_epoch = 0
         self._hub_remove_epoch = 0
         self._hub_replace_epoch = 0
+        self._hub_leave_epoch = 0
         self._hub_rules_epoch = 0
+        self._hub_leave_in_flight = False
         self._hub_player_link_token = None
         self._hub_closed = False
         self._hub_poll_timer = QTimer(self)
@@ -2916,6 +2927,11 @@ class CampaignsHubDialog(QDialog):
         self.player_replace_character_btn.clicked.connect(self._replace_player_character)
         self.player_replace_character_btn.setVisible(False)
         character_layout.addWidget(self.player_replace_character_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.player_leave_campaign_btn = QPushButton("Leave Campaign")
+        self.player_leave_campaign_btn.setObjectName("CompactButton")
+        self.player_leave_campaign_btn.clicked.connect(self._leave_player_campaign)
+        self.player_leave_campaign_btn.setVisible(False)
+        character_layout.addWidget(self.player_leave_campaign_btn, 0, Qt.AlignmentFlag.AlignLeft)
         self.player_character_section = character_section
         player_content_layout.addWidget(character_section)
 
@@ -3298,14 +3314,45 @@ class CampaignsHubDialog(QDialog):
         else:
             _report_join_publication(self, publication)
 
+    def _find_saved_character_file(self, character_id):
+        # Find by stable ID, never by display name (names need not be unique).
+        import os
+        from backend_2_1 import CharacterStorageSystem
+        CharacterStorageSystem.ensure_save_dir()
+        for directory, subdirs, files in os.walk(CharacterStorageSystem.SAVE_DIR):
+            subdirs[:] = [name for name in subdirs if name != "_history"]
+            for filename in files:
+                if not filename.lower().endswith(".didchar"):
+                    continue
+                path = os.path.join(directory, filename)
+                try:
+                    if not CharacterStorageSystem.looks_like_character_file(path):
+                        continue
+                    candidate = CharacterStorageSystem.import_character_file(path)
+                    if str(getattr(candidate, "id", "") or "") == character_id:
+                        return path
+                except Exception:
+                    continue
+        return None
+
     def _open_linked_player_character(self):
-        campaign = self.current_player_campaign
-        character = getattr(self.window, "character", None)
-        current_id = str(getattr(character, "id", "") or "")
-        if (not campaign or not current_id or
-                current_id != str(getattr(self, "_player_linked_character_id", "") or "")):
+        if not self.current_player_campaign:
             return
-        # The card displays the open sheet, not an arbitrary remote character.
+        target_id, record = self._campaign_character_record()
+        if not target_id or not record:
+            return
+        current_id = str(getattr(getattr(self.window, "character", None), "id", "") or "")
+        if current_id != target_id:
+            filepath = self._find_saved_character_file(target_id)
+            if not filepath:
+                QMessageBox.warning(
+                    self, "Character Unavailable",
+                    "The saved character file was not found. The campaign link is preserved."
+                )
+                return
+            # This existing loader handles unsaved changes and refreshes the UI.
+            if not self.window.load_character_from_path(filepath):
+                return
         self.accept()
         self.window.show()
         self.window.raise_()
@@ -3499,6 +3546,7 @@ class CampaignsHubDialog(QDialog):
         self._hub_delete_epoch += 1
         self._hub_remove_epoch += 1
         self._hub_replace_epoch += 1
+        self._hub_leave_epoch += 1
         self._hub_rules_epoch += 1
         self._hub_poll_timer.stop()
         self._did114_auto_timer.stop()
@@ -3598,6 +3646,8 @@ class CampaignsHubDialog(QDialog):
                 self._finish_dm_character_remove(payload, error)
             elif kind == "player_replace" and generation == self._hub_replace_epoch:
                 self._finish_player_replace(payload, error)
+            elif kind == "player_leave" and generation == self._hub_leave_epoch:
+                self._finish_player_leave(payload, error)
             elif kind == "rules_save" and generation == self._hub_rules_epoch:
                 self._finish_inline_rules_save(payload, error)
             elif kind == "did114_auto" and generation == self._did114_auto_epoch:
@@ -3905,6 +3955,83 @@ class CampaignsHubDialog(QDialog):
         layout.addLayout(buttons)
         return dialog.exec() == QDialog.DialogCode.Accepted
 
+    def _leave_player_campaign(self):
+        """Leave an empty player campaign without deleting it for the DM."""
+        campaign = self.current_player_campaign
+        if (not campaign or self.client is None or self._hub_leave_in_flight
+                or self._campaign_character_record(campaign)[1] is not None):
+            return
+        name = str(campaign.get("name") or "this campaign")
+        answer = QMessageBox.question(
+            self, "Leave Campaign",
+            f"Leave {name}? It will disappear from your Player Campaigns list, "
+            "but the DM's campaign and other players will not be deleted.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        campaign_id = str(campaign.get("id") or "")
+        client = self.client
+        self._hub_leave_in_flight = True
+        self.player_leave_campaign_btn.setEnabled(False)
+        self._hub_leave_epoch += 1
+        generation = self._hub_leave_epoch
+
+        def leave_remote():
+            # Check the server as well as the local UI. Another computer may
+            # have added a character or submitted an approval request.
+            characters = client._request_json(
+                "GET", "/rest/v1/campaign_characters",
+                query={"campaign_id": f"eq.{campaign_id}",
+                       "owner_user_id": f"eq.{client.user_id}",
+                       "active": "eq.true", "select": "id", "limit": "1"},
+            )
+            if not isinstance(characters, list):
+                raise RuntimeError("Could not verify campaign characters.")
+            if characters:
+                raise RuntimeError("Remove your campaign character before leaving.")
+            pending = client._request_json(
+                "GET", "/rest/v1/campaign_character_approval_requests",
+                query={"campaign_id": f"eq.{campaign_id}",
+                       "owner_user_id": f"eq.{client.user_id}",
+                       "status": "eq.pending", "select": "id", "limit": "1"},
+            )
+            if not isinstance(pending, list):
+                raise RuntimeError("Could not verify pending character requests.")
+            if pending:
+                raise RuntimeError("Withdraw your pending character request before leaving.")
+            deleted = client._request_json(
+                "DELETE", "/rest/v1/campaign_members",
+                query={"campaign_id": f"eq.{campaign_id}",
+                       "user_id": f"eq.{client.user_id}",
+                       "role": "neq.dm", "select": "campaign_id"},
+                prefer="return=representation",
+            )
+            if not isinstance(deleted, list) or not deleted:
+                raise RuntimeError("The server did not confirm leaving this campaign.")
+            return campaign_id
+
+        self._submit_hub_job("player_leave", generation, leave_remote)
+
+    def _finish_player_leave(self, campaign_id, error):
+        self._hub_leave_in_flight = False
+        if error:
+            self.player_leave_campaign_btn.setEnabled(True)
+            QMessageBox.warning(self, "Leave Campaign Failed", str(error))
+            return
+        if not campaign_id:
+            return
+        links = getattr(self.client, "links", None)
+        if links is not None:
+            for character_id, link in list(links.all_links().items()):
+                if isinstance(link, dict) and str(link.get("campaign_id") or "") == str(campaign_id):
+                    self.client.unlink_local_character(character_id)
+        if str((self.current_player_campaign or {}).get("id") or "") == str(campaign_id):
+            self.current_player_campaign = None
+        restore_campaign_connection(self.window)
+        self.reload_campaigns()
+
     def _replace_player_character(self):
         campaign = self.current_player_campaign
         character_id, record = self._campaign_character_record()
@@ -3959,6 +4086,7 @@ class CampaignsHubDialog(QDialog):
             self.player_character_status.setText("")
             self.player_add_character_btn.setVisible(False)
             self.player_replace_character_btn.setVisible(False)
+            self.player_leave_campaign_btn.setVisible(False)
             self.player_party_dashboard_btn.setVisible(False)
             self.player_campaign_info_btn.setVisible(False)
             for label in self.player_rule_summary_labels.values():
@@ -3995,14 +4123,18 @@ class CampaignsHubDialog(QDialog):
             self.player_inline_section.setVisible(False)
         self.player_replace_character_btn.setVisible(record is not None)
         self.player_add_character_btn.setVisible(record is None)
-        self.player_character_name.setCursor(Qt.CursorShape.ArrowCursor)
-        self.player_character_name.setToolTip("")
+        self.player_leave_campaign_btn.setVisible(record is None)
+        self.player_leave_campaign_btn.setEnabled(not self._hub_leave_in_flight)
+        self.player_character_name.setCursor(
+            Qt.CursorShape.PointingHandCursor if record else Qt.CursorShape.ArrowCursor
+        )
+        self.player_character_name.setToolTip("Click to open the saved character" if record else "")
         if record and is_approved:
             name = str(record.get("character_name") or "").strip()
             if character_id == open_id:
                 name = str(getattr(character, "name", "") or "").strip() or name
                 self.player_character_name.setCursor(Qt.CursorShape.PointingHandCursor)
-                self.player_character_name.setToolTip("Double-click to return to this character sheet")
+                self.player_character_name.setToolTip("Click to open this character sheet")
             self.player_character_name.setText(name or "Campaign character")
             self.player_character_status.setText("Character linked and approved by DM")
         elif record:
@@ -4806,6 +4938,13 @@ class CampaignsHubDialog(QDialog):
             pass  # Discord bot additionally prunes stale campaign IDs.
         if str((self.current_dm_campaign or {}).get("id") or "") == str(campaign_id):
             self.current_dm_campaign = None
+        # The server has confirmed deletion. Forget only links to that exact
+        # campaign; never remove saved .didchar files or other campaign links.
+        links = getattr(self.client, "links", None)
+        if links is not None:
+            for character_id, link in list(links.all_links().items()):
+                if isinstance(link, dict) and str(link.get("campaign_id") or "") == str(campaign_id):
+                    self.client.unlink_local_character(character_id)
         restore_campaign_connection(self.window)
         self.reload_campaigns()
 
