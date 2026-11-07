@@ -1,0 +1,35 @@
+name: DID campaign follow-up checks
+
+on:
+  pull_request:
+    paths:
+      - "windows/**"
+      - ".github/workflows/campaign-followups-validation.yml"
+  workflow_dispatch:
+
+jobs:
+  windows-campaign-tests:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONPATH: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Qt test dependency
+        run: python -m pip install PySide6
+      - name: Validate Python syntax
+        run: python -m compileall -q windows
+      - name: Run v1.0.14 campaign regression tests
+        run: python -m unittest discover -s windows/DID_Important_Tests -p "test_1_0_14*.py" -v
+      - name: Run campaign privacy, rules, and admission tests
+        run: |
+          python -m unittest discover -s windows/DID_Important_Tests -p "test_campaign_privacy.py" -v
+          python -m unittest discover -s windows/DID_Important_Tests -p "test_campaign_template.py" -v
+          python -m unittest discover -s windows/DID_Important_Tests -p "test_campaign_admission_1013.py" -v
+      - name: Validate dashboard JavaScript
+        run: |
+          node --check windows/dm_dashboard/app.js
+          node --check windows/party_dashboard/app.js
