@@ -51,7 +51,22 @@ def admit_character(window, campaign: dict, client, shared_state: dict, *, misma
     active = client.get_character_link(character_id)
     if isinstance(active, dict):
         if str(active.get("campaign_id") or "") != campaign_id:
-            return AdmissionResult("linked_elsewhere")
+            # A deleted campaign can leave a stale local link. Confirm its
+            # absence on the server before releasing it; never guess offline.
+            if hasattr(client, "_request_json") and hasattr(client, "user_id"):
+                from campaign_link_guard import verify_character_link, clear_confirmed_removed_link
+                old_campaign_id = str(active.get("campaign_id") or "")
+                check = verify_character_link(client, character_id, old_campaign_id)
+                if check.status == "removed":
+                    clear_confirmed_removed_link(client, character_id, check)
+                    active = client.get_character_link(character_id)
+                elif check.status == "offline":
+                    raise RuntimeError(
+                        "Could not verify the previous campaign link. Retry when online."
+                    )
+            if isinstance(active, dict) and str(active.get("campaign_id") or "") != campaign_id:
+                return AdmissionResult("linked_elsewhere")
+    if isinstance(active, dict):
         record_id = str(active.get("campaign_character_id") or "")
         if not record_id:
             raise ValueError("Existing campaign link has no record ID")
@@ -61,7 +76,24 @@ def admit_character(window, campaign: dict, client, shared_state: dict, *, misma
     pending_getter = getattr(client, "get_pending_character_approval", None)
     pending = pending_getter(character_id) if callable(pending_getter) else None
     if isinstance(pending, dict) and str(pending.get("campaign_id") or "") != campaign_id:
-        return AdmissionResult("linked_elsewhere")
+        if str(pending.get("approval_status") or "").lower() == "rejected":
+            # A rejection is not an active link. Verify the decision when the
+            # transport supports it, then release the obsolete local marker.
+            request_id = str(pending.get("request_id") or "")
+            if request_id and hasattr(client, "_request_json"):
+                rows = client._request_json(
+                    "GET", "/rest/v1/campaign_character_approval_requests",
+                    query={"id": f"eq.{request_id}",
+                           "select": "id,status", "limit": "1"},
+                )
+                if not isinstance(rows, list):
+                    raise RuntimeError("Could not verify the rejected request.")
+                if rows and rows[0].get("status") != "rejected":
+                    return AdmissionResult("linked_elsewhere")
+            client.unlink_local_character(character_id)
+            pending = None
+        else:
+            return AdmissionResult("linked_elsewhere")
 
     if mismatch_checker is None:
         from campaign_template import campaign_template, character_rule_mismatches
