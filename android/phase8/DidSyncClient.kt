@@ -5,6 +5,11 @@ import android.os.Handler
 import android.os.Looper
 import org.json.JSONObject
 import java.util.UUID
+import java.security.MessageDigest
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.X509TrustManager
+import javax.net.ssl.TrustManager
 import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -48,6 +53,7 @@ class DidSyncClient(
         val pairingToken: String,
         val serverId: String?,
         val expiresAtEpochSeconds: Long?,
+        val tlsSha256: String,
     ) {
         companion object {
             fun fromQrJson(text: String): PairingPayload {
@@ -58,6 +64,9 @@ class DidSyncClient(
                 val host = json.getString("host").trim()
                 val port = json.getInt("port")
                 val token = json.getString("pairing_token").trim()
+                require(json.optString("transport") == "wss") { "Windows needs the encrypted sync update" }
+                val fingerprint = json.optString("tls_sha256").lowercase()
+                require(fingerprint.matches(Regex("[0-9a-f]{64}"))) { "Pairing code has no valid TLS fingerprint" }
                 val expires = if (json.has("expires_at")) json.optLong("expires_at", 0L) else 0L
 
                 require(host.isNotBlank()) { "Pairing code has no computer address" }
@@ -78,6 +87,7 @@ class DidSyncClient(
                     pairingToken = token,
                     serverId = json.optString("server_id").takeIf { it.isNotBlank() },
                     expiresAtEpochSeconds = expires.takeIf { it > 0L },
+                    tlsSha256 = fingerprint,
                 )
             }
 
@@ -100,11 +110,34 @@ class DidSyncClient(
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("did_companion_sync", Context.MODE_PRIVATE)
     private val main = Handler(Looper.getMainLooper())
-    private val http = OkHttpClient.Builder()
-        .pingInterval(20, TimeUnit.SECONDS)
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .build()
+    // Never use the platform's trust-all client. Only the explicitly pinned
+    // certificate can authenticate the paired Windows installation.
+    private fun pinnedClient(fingerprint: String): OkHttpClient {
+        require(fingerprint.matches(Regex("[0-9a-f]{64}")))
+        val pin = fingerprint.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val trust = object : X509TrustManager {
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {
+                throw java.security.cert.CertificateException("Client certificates not supported")
+            }
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
+                if (chain.isEmpty() || !MessageDigest.isEqual(
+                    MessageDigest.getInstance("SHA-256").digest(chain[0].encoded), pin
+                )) throw java.security.cert.CertificateException("Windows TLS certificate does not match pairing")
+                chain[0].checkValidity()
+            }
+        }
+        val context = SSLContext.getInstance("TLS")
+        context.init(null, arrayOf<TrustManager>(trust), null)
+        return OkHttpClient.Builder()
+            .sslSocketFactory(context.socketFactory, trust)
+            // The host is a LAN IP; identity is verified by the pinned certificate.
+            .hostnameVerifier { _, _ -> true }
+            .pingInterval(20, TimeUnit.SECONDS)
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .build()
+    }
 
     private var socket: WebSocket? = null
     private var pendingPairing: PairingPayload? = null
@@ -120,9 +153,11 @@ class DidSyncClient(
         val host = prefs.getString(KEY_HOST, null) ?: return false
         val port = prefs.getInt(KEY_PORT, -1)
         val token = prefs.getString(KEY_DEVICE_TOKEN, null) ?: return false
-        if (!PairingPayload.isAllowedLanIpv4(host) || port !in 1..65535 || token.isBlank()) return false
+        val fingerprint = prefs.getString(KEY_TLS_SHA256, null) ?: return false
+        if (!PairingPayload.isAllowedLanIpv4(host) || port !in 1..65535 || token.isBlank() ||
+            !fingerprint.matches(Regex("[0-9a-f]{64}"))) return false
         pendingPairing = null
-        connectSocket(host, port)
+        connectSocket(host, port, fingerprint)
         return true
     }
 
@@ -134,7 +169,7 @@ class DidSyncClient(
         }
         pendingPairing = payload
         emit(ConnectionState.Pairing)
-        connectSocket(payload.host, payload.port)
+        connectSocket(payload.host, payload.port, payload.tlsSha256)
     }
 
     fun disconnect() {
@@ -150,6 +185,7 @@ class DidSyncClient(
             .remove(KEY_PORT)
             .remove(KEY_SERVER_ID)
             .remove(KEY_DEVICE_TOKEN)
+            .remove(KEY_TLS_SHA256)
             .apply()
     }
 
@@ -176,11 +212,11 @@ class DidSyncClient(
         payload = JSONObject().put("resource", resource).put("delta", delta),
     )
 
-    private fun connectSocket(host: String, port: Int) {
+    private fun connectSocket(host: String, port: Int, fingerprint: String) {
         socket?.cancel()
         emit(ConnectionState.Connecting)
-        val request = Request.Builder().url("ws://$host:$port").build()
-        socket = http.newWebSocket(request, SocketListener())
+        val request = Request.Builder().url("wss://$host:$port").build()
+        socket = pinnedClient(fingerprint).newWebSocket(request, SocketListener())
     }
 
     private inner class SocketListener : WebSocketListener() {
@@ -247,6 +283,7 @@ class DidSyncClient(
                     .putString(KEY_HOST, pairing.host)
                     .putInt(KEY_PORT, pairing.port)
                     .putString(KEY_DEVICE_TOKEN, token)
+                    .putString(KEY_TLS_SHA256, pairing.tlsSha256)
                     .putString(KEY_SERVER_ID, serverId)
                     .apply()
                 pendingPairing = null
@@ -319,5 +356,6 @@ class DidSyncClient(
         private const val KEY_PORT = "port"
         private const val KEY_SERVER_ID = "server_id"
         private const val KEY_DEVICE_TOKEN = "device_token"
+        private const val KEY_TLS_SHA256 = "tls_sha256"
     }
 }
