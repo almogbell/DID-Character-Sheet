@@ -166,7 +166,7 @@ def build_party_character_state_with_preferences(character_or_dict, preferences=
     except (TypeError, ValueError, OverflowError):
         current_hp = 0
     try:
-        max_hp = max(0, int(hearts.get("max") or 0) * 4)
+        max_hp = max(0, int(hearts.get("max_hp") if hearts.get("max_hp") is not None else int(hearts.get("max") or 0) * 4))
     except (TypeError, ValueError, OverflowError):
         max_hp = 0
     try:

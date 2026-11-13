@@ -16433,71 +16433,18 @@ class FantasyAbilityEditorDialog(AbilityEditorDialog):
             )
         
 
-    def can_choose_die(
-        self,
-        stat_name,
-        candidate_die,
-    ):
-
-        candidate_array = (
-            self.available_ability_arrays()
+    def can_choose_die(self, stat_name, candidate_die):
+        # The six existing dice are not fixed assignments while editing.
+        # Allow temporary distributions; the base dialog checks the complete
+        # legal ability array and 23-point budget when Save is pressed.
+        if not super().can_choose_die(stat_name, candidate_die):
+            return False
+        if not self.restrict_to_array_dice:
+            return True
+        return any(
+            candidate_die in ability_array.get("dice", ())
+            for ability_array in self.available_ability_arrays()
         )
-
-        if not self.allowed_array_ids:
-            return super().can_choose_die(
-                stat_name,
-                candidate_die,
-            )
-
-        chosen_dice = []
-
-        for other_stat_name, inputs in (
-            self.stat_inputs.items()
-        ):
-            if other_stat_name == stat_name:
-                continue
-
-            if not inputs.get(
-                "locked",
-                False,
-            ):
-                continue
-
-            chosen_dice.append(
-                int(
-                    inputs["die"]
-                )
-            )
-
-        chosen_dice.append(
-            candidate_die
-        )
-
-        for ability_array in available_arrays:
-            remaining = [
-                int(die_size)
-                for die_size
-                in ability_array.get(
-                    "dice",
-                    []
-                )
-            ]
-
-            possible = True
-
-            for chosen_die in chosen_dice:
-                if chosen_die not in remaining:
-                    possible = False
-                    break
-
-                remaining.remove(
-                    chosen_die
-                )
-
-            if possible:
-                return True
-        return False
-
 
 class LongPressReorderFilter(QObject):
     """Press and hold a card, then move and release it to reorder."""

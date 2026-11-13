@@ -265,8 +265,27 @@ def _portrait_payload(data, enabled):
         raw = entry.get("display") or entry.get("original") or entry.get("image")
     else:
         raw = entry
-    raw = str(raw or "")
-    if not raw:
+    # Some older saves store a nested {"original": "data:image/..."}
+    # object (sometimes stringified). Never send its Python repr to the browser.
+    for _ in range(5):
+        if isinstance(raw, dict):
+            raw = (raw.get("display") or raw.get("original") or
+                   raw.get("image") or raw.get("image_data") or raw.get("data"))
+            continue
+        if isinstance(raw, str) and raw.lstrip().startswith("{"):
+            try:
+                import ast
+                nested = ast.literal_eval(raw)
+            except (SyntaxError, ValueError, MemoryError, RecursionError):
+                raw = None
+                break
+            if isinstance(nested, dict):
+                raw = nested
+                continue
+        break
+    raw = str(raw or "").strip()
+    if not raw or not (raw.startswith("data:image/") or
+                       (len(raw) > 40 and all(c.isalnum() or c in "+/=\\r\\n" for c in raw[:100]))):
         return {"shared": True, "available": False}
     if len(raw) > MAX_PORTRAIT_CHARS:
         return {

@@ -402,7 +402,7 @@
     return order.map(name => {
       const value = raw[name] || {};
       return { name, die: Math.max(0, Number(value.die_size) || 0), bonus: Number(value.bonus) || 0 };
-    });
+    }).sort((a, b) => (b.die - a.die) || (b.bonus - a.bonus));
   }
 
   function formatDie(ability) {
@@ -426,7 +426,7 @@
     const ip = resources.improvement_points || {};
     const currentHp = Math.max(0, Number(hearts.current) || 0);
     const maxHearts = Math.max(0, Number(hearts.max) || 0);
-    const maxHp = maxHearts * 4;
+    const maxHp = hearts.max_hp == null ? maxHearts * 4 : Math.max(0, Number(hearts.max_hp) || 0);
     const currentAT = Math.max(0, Number(at.current) || 0);
     const maxAT = Math.max(0, Number(at.max) || 0);
     const abilities = abilityEntries(state);
@@ -571,7 +571,6 @@
         </div>
       `).join("");
 
-      const heartMaxHp = metrics.maxHearts * 4;
       const subtitle = [species, `Level ${level}`].filter(Boolean).join(" • ");
       const portraitNote = state.portrait && state.portrait.shared && state.portrait.available ? " • portrait shared" : "";
       const privacy = activeSession

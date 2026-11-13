@@ -34,8 +34,8 @@ class SharingRefreshTests(unittest.TestCase):
 
     def test_roll_toggle_is_actionable_but_server_flag_is_shared(self):
         self.assertIn('Session dice rolls (shared)',self.role)
-        self.assertIn('self.roll_share_box.setEnabled(True)',self.role)
-        self.assertIn('self.party_roll_share_box.setEnabled(True)',self.role)
+        self.assertIn('self.roll_share_box.toggled.connect(self._roll_sharing_changed)',self.role)
+        self.assertIn('self.party_roll_share_box.toggled.connect(self._party_roll_sharing_changed)',self.role)
         self.assertIn('self.session_service.set_roll_sharing(',self.role)
         self.assertIn('self._did114_pending_roll_key',self.role)
         self.assertIn('self._did114_pending_roll_share = enabled',self.role)
